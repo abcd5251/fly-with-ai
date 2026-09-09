@@ -212,7 +212,28 @@ function Activity() {
       )}
 
       {emailed && (
-        <section className="grid gap-6 py-12 lg:grid-cols-12">
+        <section className="py-12 text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-mint">
+            03 — email sent
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+            We found a flight for you ✈️
+          </h2>
+          <p className="mt-2 font-mono text-sm text-steel">
+            notification sent · {matchedFlight.airline} {matchedFlight.flightNo} · $
+            {matchedFlight.price}
+          </p>
+          <Link
+            to="/flight"
+            className="chrome bevel mt-6 inline-block rounded-lg px-10 py-3 font-mono text-sm font-bold uppercase tracking-[0.12em] text-void"
+          >
+            View matched flight
+          </Link>
+        </section>
+      )}
+    </Shell>
+  );
+}
           <div className="lg:col-span-5">
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-mint">
               05 — notification
