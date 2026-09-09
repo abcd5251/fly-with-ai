@@ -4,6 +4,72 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --color-void: #0a0c10;
+  --color-panel: #11151c;
+  --color-edge: #232a34;
+  --color-mint: #46f0c0;
+  --color-amber: #ffcf5c;
+  --color-steel: #93a1b3;
+  --color-ink: #e7ecf3;
+  --color-chrome: #cfd8e6;
+  --color-danger: #f5657f;
+  --color-log: #0b0e13;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+.chrome {
+  background: linear-gradient(180deg, #eef3fb 0%, #b9c4d6 46%, #8b98ad 100%);
+}
+.bevel {
+  border-top: 1px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+}
+.chip {
+  background: linear-gradient(180deg, #1a212b, #0e1218);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(0, 0, 0, 0.6);
+}
+.payflash {
+  animation: payflash 1.1s ease-out;
+}
+.logline {
+  animation: streamin 0.45s ease-out both;
+}
+@keyframes payflash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(70, 240, 192, 0.55);
+    background: #0e1c19;
+  }
+  40% {
+    box-shadow: 0 0 42px 4px rgba(70, 240, 192, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(70, 240, 192, 0);
+  }
+}
+@keyframes streamin {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /*
  * Design system definition.
  *
