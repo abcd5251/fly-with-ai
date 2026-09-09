@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import {
   agentRun,
@@ -14,20 +14,22 @@ import {
   returnLegFor,
   type Trip,
 } from "@/lib/trip";
+import { confirmBooking, type BookingConfirmation } from "@/lib/api";
+import { getWalletAddress } from "@/lib/x402-client";
 
 export const Route = createFileRoute("/booking")({
   head: () => ({
     meta: [
-      { title: "Confirm & Sign — Book Your Flight | TravelPay AI" },
+      { title: "Confirm & Pay — Book Your Flight | TravelPay AI" },
       {
         name: "description",
         content:
-          "Your AI agent already evaluated this flight. Sign once on Hedera to confirm the booking.",
+          "Your AI agent already evaluated this flight. Pay with x402 to confirm the booking.",
       },
-      { property: "og:title", content: "Confirm & Sign — Book Your Flight" },
+      { property: "og:title", content: "Confirm & Pay — Book Your Flight" },
       {
         property: "og:description",
-        content: "One signature confirms the booking the agent found for you.",
+        content: "Pay $0.10 USDC to confirm the booking the agent found for you.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -36,29 +38,56 @@ export const Route = createFileRoute("/booking")({
   component: Booking,
 });
 
+type BookingState = "ready" | "signing" | "processing" | "done" | "error";
+
 function Booking() {
   const [trip, setTrip] = useState<Trip>(defaultTrip);
   const [flightId, setFlightId] = useState(matchedFlight.id);
   const [fareIndex, setFareIndex] = useState(1);
-  const [state, setState] = useState<"ready" | "signing" | "done">("ready");
+  const [state, setState] = useState<BookingState>("ready");
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string>("Loading...");
 
   useEffect(() => {
     setTrip(loadTrip());
     const sel = loadSelection();
     setFlightId(sel.flightId);
     setFareIndex(sel.fareIndex);
+    try {
+      setWalletAddress(getWalletAddress());
+    } catch {
+      setWalletAddress("Not configured");
+    }
   }, []);
-
-  useEffect(() => {
-    if (state !== "signing") return;
-    const id = setTimeout(() => setState("done"), 1800);
-    return () => clearTimeout(id);
-  }, [state]);
 
   const f = flightById(flightId);
   const back = returnLegFor(f.id);
   const fare = f.fares[fareIndex] ?? f.fares[0]!;
   const total = (f.price + fare.delta) * trip.passengers;
+
+  const handleConfirm = async () => {
+    setState("signing");
+    setError(null);
+
+    try {
+      setState("processing");
+      const result = await confirmBooking({
+        flightId,
+        fareIndex,
+        passengers: trip.passengers,
+        email: trip.email,
+      });
+      setConfirmation(result.confirmation);
+      setState("done");
+    } catch (err) {
+      console.error("Booking error:", err);
+      setError(err instanceof Error ? err.message : "Payment failed. Please try again.");
+      setState("error");
+    }
+  };
+
+  const isProcessing = state === "signing" || state === "processing";
 
   return (
     <Shell>
@@ -72,10 +101,10 @@ function Booking() {
             Back to flight details
           </Link>
           <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.25em] text-mint">
-            {state === "done" ? "booked" : "confirm & sign"}
+            {state === "done" ? "booked" : "confirm & pay"}
           </p>
           <h1 className="mt-3 text-2xl font-semibold leading-tight tracking-tight">
-            {state === "done" ? "🎉 Booking confirmed" : "Ready to book"}
+            {state === "done" ? "Booking confirmed" : "Ready to book"}
           </h1>
 
           <div className="mt-5 rounded-xl border border-edge bg-panel p-5 font-mono text-[13px]">
@@ -86,7 +115,7 @@ function Booking() {
               { k: "Dates", v: `${fmtDate(trip.depart)} – ${fmtDate(trip.ret)}` },
               { k: "Travellers", v: `${trip.passengers} · ${f.cabin}` },
               { k: "Fare", v: `${fare.name}` },
-              { k: "Settlement", v: agentRun.network },
+              { k: "Payment", v: "$0.10 USDC · Base Sepolia" },
             ].map((s) => (
               <div key={s.k} className="flex justify-between py-1.5">
                 <span className="text-steel">{s.k}</span>
@@ -99,21 +128,50 @@ function Booking() {
             </div>
           </div>
 
-          {state === "done" ? (
+          {/* Wallet info */}
+          <div className="mt-3 rounded-lg bg-white/5 px-4 py-2.5 font-mono text-[11px]">
+            <span className="text-steel">Wallet: </span>
+            <span className="text-ink">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+          </div>
+
+          {state === "done" && confirmation ? (
             <div className="mt-5 rounded-lg border border-mint/40 bg-mint/10 px-4 py-3 font-mono text-[13px] text-mint">
-              ✓ payment confirmed · tx {agentRun.txId}
+              <p className="font-bold">Payment confirmed</p>
+              <p className="mt-1">Confirmation: {confirmation.code}</p>
+            </div>
+          ) : state === "error" ? (
+            <div className="mt-5 space-y-3">
+              <div className="flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-3 font-mono text-[13px] text-red-400">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+              <button
+                onClick={() => setState("ready")}
+                className="chrome bevel w-full rounded-xl py-3.5 font-mono text-sm font-bold uppercase tracking-[0.12em] text-void"
+              >
+                Try again
+              </button>
             </div>
           ) : (
             <button
-              disabled={state === "signing"}
-              onClick={() => setState("signing")}
+              disabled={isProcessing}
+              onClick={handleConfirm}
               className="chrome bevel mt-5 w-full rounded-xl py-3.5 font-mono text-sm font-bold uppercase tracking-[0.12em] text-void disabled:opacity-60"
             >
-              {state === "signing" ? "signing…" : "Confirm & sign"}
+              {isProcessing ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="size-4 animate-spin" />
+                  {state === "signing" ? "Signing..." : "Processing payment..."}
+                </span>
+              ) : (
+                "Confirm & Pay $0.10"
+              )}
             </button>
           )}
           <p className="mt-3 font-mono text-[11px] text-steel">
-            Sign once — the agent handled the rest.
+            {state === "done"
+              ? "Your e-ticket will be sent to your email."
+              : "x402 payment · the agent handled the rest."}
           </p>
         </div>
 
@@ -143,10 +201,16 @@ function Booking() {
             >
               {state === "done" ? (
                 <Check className="size-3.5 shrink-0" />
+              ) : isProcessing ? (
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
               ) : (
                 <span className="size-3.5 text-center">•</span>
               )}
-              Booking confirmed
+              {state === "done"
+                ? "Booking confirmed"
+                : isProcessing
+                  ? "Processing x402 payment..."
+                  : "Awaiting payment"}
             </li>
           </ol>
         </div>
