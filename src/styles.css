@@ -32,6 +32,53 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 1px 0 rgba(0, 0, 0, 0.6);
 }
+.nospin {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.nospin::-webkit-outer-spin-button,
+.nospin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #46f0c0 0%,
+    #46f0c0 var(--fill, 55%),
+    #232a34 var(--fill, 55%)
+  );
+  outline: none;
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #eef3fb, #b9c4d6);
+  border: 1px solid rgba(10, 12, 16, 0.6);
+  box-shadow: 0 0 0 4px rgba(70, 240, 192, 0.15);
+  cursor: pointer;
+}
+.range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #eef3fb;
+  border: 1px solid rgba(10, 12, 16, 0.6);
+  box-shadow: 0 0 0 4px rgba(70, 240, 192, 0.15);
+  cursor: pointer;
+}
+.range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #232a34;
+}
 .payflash {
   animation: payflash 1.1s ease-out;
 }
