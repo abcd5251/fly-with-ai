@@ -1,4 +1,4 @@
-import { requestHoldOnChain, releaseHoldOnChain } from "./api";
+import { requestHoldOnChain, releaseHoldOnChain, settleHoldOnChain } from "./api";
 import type { Trip } from "./trip";
 
 /**
@@ -134,6 +134,8 @@ export function expireHold(hold: Hold): Hold {
 export function markBooked(hold: Hold): Hold {
   const next: Hold = { ...hold, status: "booked" };
   saveHold(next);
+  // the deposit leaves escrow for the seller — fire and forget
+  if (hold.mode === "onchain") void settleHoldOnChain(hold.id);
   return next;
 }
 

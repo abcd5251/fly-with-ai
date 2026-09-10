@@ -105,10 +105,17 @@ export type HoldResponse = {
   depositTx: string;
 };
 
+function payingFetch(): typeof fetch {
+  try {
+    return getX402Fetch();
+  } catch {
+    return fetch; // no wallet configured — /holds is free, keep the demo running
+  }
+}
+
 export async function requestHoldOnChain(req: HoldRequest): Promise<HoldResponse | null> {
   try {
-    const x402Fetch = getX402Fetch();
-    const res = await x402Fetch(`${API_URL}/holds`, {
+    const res = await payingFetch()(`${API_URL}/holds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -129,6 +136,61 @@ export async function releaseHoldOnChain(holdId: string): Promise<{ refundTx: st
   } catch {
     return null;
   }
+}
+
+export async function settleHoldOnChain(holdId: string): Promise<{ settleTx: string } | null> {
+  try {
+    const res = await fetch(`${API_URL}/holds/${holdId}/settle`, { method: "POST" });
+    if (!res.ok) return null;
+    return (await res.json()) as { settleTx: string };
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------- escrow vault */
+
+export type EscrowEntry = {
+  id: string;
+  flightNo: string;
+  airline: string;
+  route: string;
+  passengers: number;
+  priceLocked: number;
+  fee: number;
+  deposit: number;
+  status: "held" | "released" | "expired" | "settled";
+  createdAt: number;
+  expiresAt: number;
+  closedAt?: number;
+  depositTx: string;
+  refundTx?: string;
+  settleTx?: string;
+  chain: string;
+};
+
+export type EscrowSnapshot = {
+  tvl: number;
+  active: number;
+  totals: {
+    opened: number;
+    settled: number;
+    released: number;
+    expired: number;
+    feesPaid: number;
+    depositsSettled: number;
+    depositsRefunded: number;
+  };
+  avgWindowHours: number;
+  avgHeldMinutes: number;
+  contract: { address: string | null; network: string; explorer: string | null; deployed: boolean };
+  entries: EscrowEntry[];
+};
+
+export async function fetchEscrow(): Promise<EscrowSnapshot> {
+  const res = await fetch(`${API_URL}/escrow`);
+  if (!res.ok) throw new Error(`Failed to load escrow: ${res.statusText}`);
+  return (await res.json()) as EscrowSnapshot;
 }
 
 /* ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { flights, flightById, returnLegFor } from "./data/flights.js";
 import type { Flight } from "./data/flights.js";
 import { searchLiveFlights, serpApiKey } from "./lib/serpapi.js";
+import { closeHold, escrowContract, openHold, snapshot } from "./lib/escrow.js";
 
 const app = express();
 
@@ -172,6 +173,71 @@ app.get("/flights/:id", (req, res) => {
   res.json({ flight, returnLeg });
 });
 
+// SEAT HOLDS — the agent buys a short-lived option on a seat. The fee is a
+// one-way x402 payment; the deposit is locked in the HoldEscrow contract.
+
+app.post("/holds", (req, res) => {
+  const { flightId, passengers = 1, hours = 24 } = req.body ?? {};
+  const flight = liveCache.get(flightId) ?? flightById(flightId);
+  if (!flight) {
+    res.status(400).json({ error: "Invalid flight ID" });
+    return;
+  }
+
+  const fareTotal = flight.price * (Number(passengers) || 1);
+  const window = Math.min(72, Math.max(1, Number(hours) || 24));
+  const fee = Math.max(1, Math.round(fareTotal * 0.005 * (window / 24) * 100) / 100);
+  const deposit = Math.min(60, Math.max(10, Math.round(fareTotal * 0.1)));
+
+  const entry = openHold({
+    flightId: flight.id,
+    flightNo: flight.flightNo,
+    airline: flight.airline,
+    route: `${flight.fromCode} → ${flight.toCode}`,
+    passengers: Number(passengers) || 1,
+    priceLocked: flight.price,
+    fee,
+    deposit,
+    hours: window,
+  });
+
+  console.log(`Hold ${entry.id} opened · ${flight.flightNo} · deposit $${deposit} escrowed`);
+
+  res.json({
+    holdId: entry.id,
+    expiresAt: new Date(entry.expiresAt).toISOString(),
+    fee: entry.fee,
+    deposit: entry.deposit,
+    escrow: escrowContract().address ?? "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170",
+    feeTx: entry.feeTx,
+    depositTx: entry.depositTx,
+    chain: entry.chain,
+  });
+});
+
+app.post("/holds/:id/release", (req, res) => {
+  const entry = closeHold(req.params.id, "released");
+  if (!entry) {
+    res.status(404).json({ error: "No open hold with that id" });
+    return;
+  }
+  res.json({ refundTx: entry.refundTx, deposit: entry.deposit, status: entry.status });
+});
+
+app.post("/holds/:id/settle", (req, res) => {
+  const entry = closeHold(req.params.id, "settled");
+  if (!entry) {
+    res.status(404).json({ error: "No open hold with that id" });
+    return;
+  }
+  res.json({ settleTx: entry.settleTx, deposit: entry.deposit, status: entry.status });
+});
+
+// GET /escrow - vault snapshot for the TVL dashboard
+app.get("/escrow", (req, res) => {
+  res.json(snapshot(Number(req.query["limit"] ?? 12) || 12));
+});
+
 // PAID endpoint
 
 // POST /booking - Requires x402 payment
@@ -222,7 +288,13 @@ app.listen(PORT, () => {
   console.log(
     `  GET  /flights/catalog - Free: live Google Flights (SerpApi ${serpApiKey() ? "key loaded" : "NO KEY"}) + demo rows`
   );
+  console.log(`  POST /holds          - Free: open a seat hold (deposit → escrow)`);
+  console.log(`  GET  /escrow         - Free: escrow vault snapshot`);
   console.log(`  POST /booking        - Paid: $0.10 USDC on Base Sepolia`);
+  const c = escrowContract();
+  console.log(
+    `\nEscrow: ${c.deployed ? `${c.address} on ${c.network}` : "not deployed — ledger runs off-chain"}`
+  );
   console.log(`  GET  /health         - Free: health check`);
   console.log(`\nFacilitator: https://x402.org/facilitator (testnet)`);
   console.log(`Network: Base Sepolia (eip155:84532)`);

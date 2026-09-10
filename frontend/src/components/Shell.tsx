@@ -20,6 +20,12 @@ export function Shell({ children, step }: { children: ReactNode; step?: 1 | 2 })
             </span>
           </Link>
           <div className="flex items-center gap-6">
+            <Link
+              to="/escrow"
+              className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-steel transition-colors hover:text-mint sm:inline"
+            >
+              escrow vault
+            </Link>
             <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-steel sm:inline">
               hedera testnet
             </span>
