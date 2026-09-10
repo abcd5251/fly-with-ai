@@ -15,6 +15,7 @@ import {
   Timer,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { useCatalog } from "@/hooks/use-catalog";
 import { useCountdown } from "@/hooks/use-countdown";
 import {
   fmtCountdown,
@@ -34,6 +35,7 @@ import {
   matchedFlight,
   money,
   nightsBetween,
+  saveSelection,
   saveTrip,
   type Trip,
 } from "@/lib/trip";
@@ -72,7 +74,11 @@ function RequestPage() {
 
   useEffect(() => setTrip(loadTrip()), []);
 
-  const quote = holdQuote(matchedFlight.price * trip.passengers, trip.holdHours);
+  const catalog = useCatalog(trip);
+  const match = catalog.flights[0] ?? matchedFlight;
+  const liveSource = catalog.live > 0;
+
+  const quote = holdQuote(match.price * trip.passengers, trip.holdHours);
   const gate = policyCheck(quote, trip);
 
   const monitorLog = [
@@ -81,8 +87,10 @@ function RequestPage() {
     "HTTP 402 · payment required",
     `paid ${agentRun.paid} HBAR · x402`,
     "hedera testnet tx confirmed",
-    `${agentRun.optionsScanned} options analyzed · scored against budget`,
-    `match found · ${matchedFlight.airline} ${matchedFlight.flightNo} ${money(matchedFlight.price)}`,
+    liveSource
+      ? `google flights · ${catalog.flights.length} itineraries priced`
+      : `${agentRun.optionsScanned} options analyzed · scored against budget`,
+    `match found · ${match.airline} ${match.flightNo} ${money(match.price)}`,
     ...(trip.autoHold
       ? gate.ok
         ? [
@@ -114,18 +122,19 @@ function RequestPage() {
   useEffect(() => {
     if (!emailedNow || !gate.ok || holdPlaced.current) return;
     holdPlaced.current = true;
+    saveSelection({ flightId: match.id, fareIndex: 1 });
     placeHold({
       trip,
-      flightId: matchedFlight.id,
+      flightId: match.id,
       fareIndex: 1,
-      priceLocked: matchedFlight.price,
+      priceLocked: match.price,
       hours: trip.holdHours,
     })
       .then(setHold)
       .catch(() => {
         holdPlaced.current = false;
       });
-  }, [emailedNow, gate.ok, trip]);
+  }, [emailedNow, gate.ok, trip, match]);
 
   const holdLeft = useCountdown(hold?.expiresAt ?? null);
   const holdLive = isActive(hold, Date.now()) && holdLeft > 0;
@@ -247,8 +256,8 @@ function RequestPage() {
                   <div className="logline mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/35 bg-mint/[0.06] px-4 py-3">
                     <p className="inline-flex items-center gap-2 font-mono text-[12px] text-mint">
                       <Lock className="size-3.5" />
-                      seat held · {matchedFlight.airline} {matchedFlight.flightNo} · price locked at{" "}
-                      {money(matchedFlight.price)}
+                      seat held · {match.airline} {match.flightNo} · price locked at{" "}
+                      {money(match.price)}
                     </p>
                     <p className="inline-flex items-center gap-2 font-mono text-[12px] text-ink">
                       <Timer className="size-3.5 text-mint" />
@@ -286,14 +295,13 @@ function RequestPage() {
                     </div>
                     <p className="mt-3.5 text-[15px] font-semibold text-ink">
                       {holdLive ? "🔒 Seat held — " : "✈️ Match found — "}
-                      {matchedFlight.airline} {matchedFlight.flightNo} for{" "}
-                      {money(matchedFlight.price)}
+                      {match.airline} {match.flightNo} for {money(match.price)}
                       {holdLive && (
                         <span className="text-mint"> · {fmtCountdown(holdLeft)} left</span>
                       )}
                     </p>
                     <p className="mt-1.5 text-[13px] leading-relaxed text-steel">
-                      {trip.from} → {trip.to} · direct · {matchedFlight.duration}.{" "}
+                      {trip.from} → {trip.to} · direct · {match.duration}.{" "}
                       {holdLive ? (
                         <>
                           I paid {money(hold!.fee)} to take this seat off the market and escrowed{" "}
@@ -308,8 +316,17 @@ function RequestPage() {
                         </>
                       )}
                     </p>
+                    <p className="mt-2.5 font-mono text-[10.5px] text-steel">
+                      {liveSource
+                        ? `live fare · google flights via serpapi${
+                            catalog.fetchedAt
+                              ? ` · ${new Date(catalog.fetchedAt).toLocaleString()}`
+                              : ""
+                          }`
+                        : "demo inventory · seller offline"}
+                    </p>
                     {holdLive && (
-                      <p className="mt-2.5 font-mono text-[10.5px] text-steel">
+                      <p className="mt-1 font-mono text-[10.5px] text-steel">
                         escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
                         {hold!.mode === "simulated" && " · local"}
                       </p>

@@ -130,3 +130,41 @@ export async function releaseHoldOnChain(holdId: string): Promise<{ refundTx: st
     return null;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Flight catalog — live Google Flights rows (SerpApi, server-side) merged with
+ * the demo inventory by the seller.
+ * ------------------------------------------------------------------------- */
+
+export type CatalogResponse = {
+  flights: Flight[];
+  returnLegs: Record<string, ReturnLeg>;
+  live: number;
+  source: "serpapi" | "serpapi-cache" | "none";
+  fetchedAt: string | null;
+  insights?: { lowest?: number; level?: string; typicalRange?: [number, number] };
+  liveError?: string;
+};
+
+export type CatalogQuery = {
+  from: string;
+  to: string;
+  depart: string;
+  ret: string;
+  adults: number;
+  directOnly: boolean;
+};
+
+export async function fetchCatalog(q: CatalogQuery): Promise<CatalogResponse> {
+  const params = new URLSearchParams({
+    from: q.from,
+    to: q.to,
+    depart: q.depart,
+    return: q.ret,
+    adults: String(q.adults),
+    direct: String(q.directOnly),
+  });
+  const res = await fetch(`${API_URL}/flights/catalog?${params}`);
+  if (!res.ok) throw new Error(`Failed to load flights: ${res.statusText}`);
+  return (await res.json()) as CatalogResponse;
+}

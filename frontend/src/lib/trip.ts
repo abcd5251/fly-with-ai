@@ -24,9 +24,9 @@ export const defaultTrip: Trip = {
   fromCode: "TPE",
   to: "Tokyo",
   toCode: "TYO",
-  depart: "2026-10-20",
-  ret: "2026-10-25",
-  budget: 500,
+  depart: "2026-09-23",
+  ret: "2026-09-30",
+  budget: 550,
   passengers: 1,
   cabin: "Economy",
   directOnly: true,
@@ -108,6 +108,11 @@ export type Flight = {
   amenities: Amenity[];
   tag?: string;
   fares: Fare[];
+  /** true when the row came from the live Google Flights query */
+  live?: boolean;
+  co2kg?: number;
+  oftenDelayed?: boolean;
+  departureToken?: string;
 };
 
 function fareSet(opts: {
@@ -420,6 +425,17 @@ export function loadTrip(): Trip {
 export function saveSelection(sel: Selection) {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(SEL, JSON.stringify(sel));
+}
+
+/** null when the traveller hasn't picked anything yet. */
+export function storedSelection(): Selection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SEL);
+    return raw ? (JSON.parse(raw) as Selection) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function loadSelection(): Selection {

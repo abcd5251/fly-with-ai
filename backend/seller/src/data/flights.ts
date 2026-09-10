@@ -45,6 +45,11 @@ export type Flight = {
   amenities: Amenity[];
   tag?: string;
   fares: Fare[];
+  /** set on rows that came from the live Google Flights query */
+  live?: boolean;
+  co2kg?: number;
+  oftenDelayed?: boolean;
+  departureToken?: string;
 };
 
 export type ReturnLeg = {

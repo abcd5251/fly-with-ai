@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Armchair,
@@ -18,6 +18,7 @@ import {
   RefreshCcw,
   ShieldCheck,
   Sparkles,
+  Radio,
   Timer,
   TrendingDown,
   TriangleAlert,
@@ -29,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { pickFlight, useCatalog } from "@/hooks/use-catalog";
 import { useCountdown } from "@/hooks/use-countdown";
 import {
   coversFlight,
@@ -50,6 +52,7 @@ import {
   flightById,
   flights,
   loadSelection,
+  storedSelection,
   matchedFlight,
   loadTrip,
   money,
@@ -136,13 +139,21 @@ function OptionRow({
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {f.live && (
+          <span className="inline-flex items-center gap-1.5 rounded bg-mint/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-mint">
+            <Radio className="size-3" />
+            live fare
+          </span>
+        )}
         {f.tag && (
           <span className="rounded bg-mint/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-mint">
             {f.tag}
           </span>
         )}
         <span className="inline-flex items-center gap-1.5 rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] text-steel">
-          <Leaf className="size-3 text-mint/80" />-{f.co2}% CO₂e · {f.trees} trees/day
+          <Leaf className="size-3 text-mint/80" />
+          {f.co2 >= 0 ? "−" : "+"}
+          {Math.abs(f.co2)}% CO₂e{f.co2kg ? ` · ${f.co2kg} kg` : ` · ${f.trees} trees/day`}
         </span>
         {f.seatsLeft <= 4 && (
           <span className="rounded bg-amber/15 px-2 py-0.5 font-mono text-[10px] font-bold text-amber">
@@ -274,9 +285,11 @@ function LegTimeline({
           <p className="text-sm font-semibold text-ink">
             {origin.code} · {origin.city} {origin.airport}
           </p>
-          <p className="font-mono text-[11px] text-steel">
-            Terminal {origin.terminal.replace("T", "")}
-          </p>
+          {origin.terminal && (
+            <p className="font-mono text-[11px] text-steel">
+              Terminal {origin.terminal.replace("T", "")}
+            </p>
+          )}
         </div>
 
         {/* segment */}
@@ -304,9 +317,11 @@ function LegTimeline({
           <p className="text-sm font-semibold text-ink">
             {destination.code} · {destination.city} {destination.airport}
           </p>
-          <p className="font-mono text-[11px] text-steel">
-            Terminal {destination.terminal.replace("T", "")}
-          </p>
+          {destination.terminal && (
+            <p className="font-mono text-[11px] text-steel">
+              Terminal {destination.terminal.replace("T", "")}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -444,16 +459,35 @@ function MatchPage() {
   const [holdBusy, setHoldBusy] = useState(false);
   const [confirmRelease, setConfirmRelease] = useState(false);
 
+  const pinned = useRef(false);
+
   useEffect(() => {
     setTrip(loadTrip());
-    const sel = loadSelection();
-    setFlightId(sel.flightId);
-    setFareIndex(sel.fareIndex);
+    const sel = storedSelection();
+    if (sel) {
+      setFlightId(sel.flightId);
+      setFareIndex(sel.fareIndex);
+      pinned.current = true;
+    }
     setHold(loadHold());
   }, []);
 
-  const f = flightById(flightId);
-  const back = returnLegFor(f.id);
+  const catalog = useCatalog(trip);
+  const f = pickFlight(catalog, flightId);
+  const back = f.live ? null : (catalog.returnLegs[f.id] ?? returnLegFor(f.id));
+  // follow the agent's match until the traveller picks something themselves
+  useEffect(() => {
+    // wait for the live list — resetting against the offline fallback would
+    // throw away the agent's match before it ever loads
+    if (catalog.loading) return;
+    const top = catalog.flights[0];
+    if (!top) return;
+    if (!pinned.current || !catalog.flights.some((x) => x.id === flightId)) {
+      setFlightId(top.id);
+      setFareIndex(1);
+    }
+  }, [catalog.flights, catalog.loading, flightId]);
+
   const fare = f.fares[fareIndex] ?? f.fares[0]!;
   const perPerson = f.price + fare.delta;
   const total = perPerson * trip.passengers;
@@ -463,7 +497,7 @@ function MatchPage() {
   const holdLeft = useCountdown(hold && hold.status === "held" ? hold.expiresAt : null);
   const holdLive = !!hold && hold.status === "held" && holdLeft > 0;
   const holdApplies = holdLive && coversFlight(hold, f.id);
-  const holdFlight = hold ? flightById(hold.flightId) : null;
+  const holdFlight = hold ? pickFlight(catalog, hold.flightId) : null;
   const holdWindowPct = hold
     ? Math.max(0, Math.min(100, (holdLeft / (hold.expiresAt - hold.createdAt)) * 100))
     : 0;
@@ -514,10 +548,22 @@ function MatchPage() {
   const facts = [
     { icon: Plane, k: "Aircraft", v: f.aircraft },
     { icon: Armchair, k: "Seat pitch", v: f.legroom },
-    { icon: Clock, k: "On-time rate", v: `${f.onTime}%` },
-    { icon: Leaf, k: "CO₂e", v: `-${f.co2}% vs avg` },
-    { icon: Users, k: "Seats left", v: `${f.seatsLeft} at this fare` },
-    { icon: TrendingDown, k: "Price trend", v: "Lowest in 21 days" },
+    {
+      icon: Clock,
+      k: "On-time",
+      v: f.oftenDelayed ? "often delayed" : `${f.onTime}%`,
+    },
+    { icon: Leaf, k: "CO₂e", v: `${f.co2 >= 0 ? "−" : "+"}${Math.abs(f.co2)}% vs avg` },
+    {
+      icon: Users,
+      k: "Seats left",
+      v: f.live ? "live inventory" : `${f.seatsLeft} at this fare`,
+    },
+    {
+      icon: TrendingDown,
+      k: "Price level",
+      v: f.live && catalog.insights?.level ? catalog.insights.level : "Lowest in 21 days",
+    },
   ];
 
   const book = () => {
@@ -573,6 +619,12 @@ function MatchPage() {
                 View full agent log
                 <ChevronRight className="size-3.5" />
               </Link>
+              <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] text-steel">
+                <Radio className={`size-3.5 ${catalog.live ? "text-mint" : "text-steel"}`} />
+                {catalog.live
+                  ? `${catalog.live} of ${catalog.flights.length} rows live · google flights`
+                  : "demo inventory · seller offline"}
+              </span>
             </div>
           </div>
 
@@ -795,7 +847,7 @@ function MatchPage() {
       <section className="mt-9">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <h2 className="text-xl font-semibold tracking-tight">
-            {flights.length} options unlocked
+            {catalog.flights.length} options unlocked
             <span className="ml-2 font-mono text-[12px] font-normal text-steel">
               ranked against your {money(trip.budget)} budget
             </span>
@@ -803,7 +855,7 @@ function MatchPage() {
           <p className="font-mono text-[11px] text-steel">round trip · per person · taxes in</p>
         </div>
         <div className="mt-4 space-y-3">
-          {flights.map((opt) => (
+          {catalog.flights.map((opt) => (
             <OptionRow
               key={opt.id}
               f={opt}
@@ -812,6 +864,7 @@ function MatchPage() {
               onSelect={() => {
                 setFlightId(opt.id);
                 setFareIndex(1);
+                pinned.current = true;
                 saveSelection({ flightId: opt.id, fareIndex: 1 });
               }}
             />
@@ -829,7 +882,8 @@ function MatchPage() {
                 selected itinerary
               </p>
               <h2 className="mt-1 text-xl font-semibold leading-tight tracking-tight">
-                {f.airline} {f.flightNo} / {back.flightNo}
+                {f.airline} {f.flightNo}
+                {back ? ` / ${back.flightNo}` : ""}
               </h2>
               <p className="font-mono text-[11px] text-steel">
                 {f.fromCode} → {f.toCode} → {f.fromCode} · {f.cabin} · {f.aircraft}
@@ -869,30 +923,47 @@ function MatchPage() {
             cabin={f.cabin}
             amenities={f.amenities}
           />
-          <LegTimeline
-            label="Return"
-            date={fmtDate(trip.ret, { weekday: "long", month: "short", day: "numeric" })}
-            duration={back.duration}
-            departTime={back.departTime}
-            arriveTime={back.arriveTime}
-            origin={{
-              code: f.toCode,
-              city: f.toCity,
-              airport: f.toAirport,
-              terminal: back.fromTerminal,
-            }}
-            destination={{
-              code: f.fromCode,
-              city: f.fromCity,
-              airport: f.fromAirport,
-              terminal: back.toTerminal,
-            }}
-            airline={f.airline}
-            flightNo={back.flightNo}
-            aircraft={back.aircraft}
-            cabin={f.cabin}
-            amenities={f.amenities}
-          />
+          {back ? (
+            <LegTimeline
+              label="Return"
+              date={fmtDate(trip.ret, { weekday: "long", month: "short", day: "numeric" })}
+              duration={back.duration}
+              departTime={back.departTime}
+              arriveTime={back.arriveTime}
+              origin={{
+                code: f.toCode,
+                city: f.toCity,
+                airport: f.toAirport,
+                terminal: back.fromTerminal,
+              }}
+              destination={{
+                code: f.fromCode,
+                city: f.fromCity,
+                airport: f.fromAirport,
+                terminal: back.toTerminal,
+              }}
+              airline={f.airline}
+              flightNo={back.flightNo}
+              aircraft={back.aircraft}
+              cabin={f.cabin}
+              amenities={f.amenities}
+            />
+          ) : (
+            <div className="flex flex-col justify-center gap-3 rounded-2xl border border-dashed border-edge bg-panel p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded bg-white/[0.06] px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-steel">
+                  Return
+                </span>
+                <span className="font-mono text-[12px] text-steel">
+                  {fmtDate(trip.ret, { weekday: "long", month: "short", day: "numeric" })}
+                </span>
+              </div>
+              <p className="text-[13px] leading-relaxed text-steel">
+                The {money(f.price)} shown is the round-trip total for this outbound. Google Flights
+                prices return options once an outbound is chosen — the agent picks it at booking.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* hard facts */}
@@ -947,7 +1018,7 @@ function MatchPage() {
               <dd className="text-ink">{money(f.base * trip.passengers)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-steel">Taxes & carrier charges</dt>
+              <dt className="text-steel">Taxes & carrier charges{f.live ? " · est. split" : ""}</dt>
               <dd className="text-ink">{money(f.taxes * trip.passengers)}</dd>
             </div>
             <div className="flex justify-between">

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Check, Loader2, AlertCircle, Lock } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { pickFlight, useCatalog } from "@/hooks/use-catalog";
 import {
   agentRun,
   defaultTrip,
@@ -64,8 +65,9 @@ function Booking() {
     }
   }, []);
 
-  const f = flightById(flightId);
-  const back = returnLegFor(f.id);
+  const catalog = useCatalog(trip);
+  const f = pickFlight(catalog, flightId);
+  const back = f.live ? null : (catalog.returnLegs[f.id] ?? returnLegFor(f.id));
   const fare = f.fares[fareIndex] ?? f.fares[0]!;
   const total = (f.price + fare.delta) * trip.passengers;
   const holdApplies =
@@ -118,7 +120,10 @@ function Booking() {
           <div className="mt-5 rounded-xl border border-edge bg-panel p-5 font-mono text-[13px]">
             {[
               { k: "Airline", v: `${f.airline} · ${f.stops === 0 ? "direct" : `${f.stops} stop`}` },
-              { k: "Flights", v: `${f.flightNo} / ${back.flightNo}` },
+              {
+                k: "Flights",
+                v: back ? `${f.flightNo} / ${back.flightNo}` : `${f.flightNo} · outbound`,
+              },
               { k: "Route", v: `${f.fromCode} → ${f.toCode}` },
               { k: "Dates", v: `${fmtDate(trip.depart)} – ${fmtDate(trip.ret)}` },
               { k: "Travellers", v: `${trip.passengers} · ${f.cabin}` },
