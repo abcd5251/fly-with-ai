@@ -10,6 +10,13 @@ export type Trip = {
   cabin: "Economy" | "Premium" | "Business";
   directOnly: boolean;
   email: string;
+  /** Let the agent buy a short-lived hold on the seat when it finds a match. */
+  autoHold: boolean;
+  /** Hard caps the agent cannot spend past, in USD. */
+  maxHoldFee: number;
+  maxDeposit: number;
+  /** How long the seat stays held, in hours. */
+  holdHours: number;
 };
 
 export const defaultTrip: Trip = {
@@ -24,6 +31,10 @@ export const defaultTrip: Trip = {
   cabin: "Economy",
   directOnly: true,
   email: "you@example.com",
+  autoHold: true,
+  maxHoldFee: 3,
+  maxDeposit: 60,
+  holdHours: 24,
 };
 
 export const cityCodes: Record<string, string> = {
@@ -427,7 +438,11 @@ export function flightById(id: string): Flight {
 
 /** 1144 → "$1,144" */
 export function money(n: number) {
-  return `$${Math.round(n).toLocaleString("en-US")}`;
+  const v = Math.round(n * 100) / 100;
+  return `$${v.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /** "2026-10-20" → "Tue, Oct 20" (falls back to the raw string). */

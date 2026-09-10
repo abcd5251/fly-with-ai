@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeftRight,
   BellRing,
@@ -9,10 +9,23 @@ import {
   MailOpen,
   Minus,
   Plus,
+  Lock,
   Radar,
   Settings2,
+  Timer,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { useCountdown } from "@/hooks/use-countdown";
+import {
+  fmtCountdown,
+  holdQuote,
+  holdWindows,
+  isActive,
+  placeHold,
+  policyCheck,
+  shortTx,
+  type Hold,
+} from "@/lib/hold";
 import {
   agentRun,
   codeFor,
@@ -54,17 +67,32 @@ function RequestPage() {
   const [monitoring, setMonitoring] = useState(false);
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
+  const [hold, setHold] = useState<Hold | null>(null);
+  const holdPlaced = useRef(false);
 
   useEffect(() => setTrip(loadTrip()), []);
 
+  const quote = holdQuote(matchedFlight.price * trip.passengers, trip.holdHours);
+  const gate = policyCheck(quote, trip);
+
   const monitorLog = [
     `monitoring ${trip.fromCode} → ${trip.toCode} · polling every 5 min`,
-    "POST /api/flights/search",
+    "POST /flights/search",
     "HTTP 402 · payment required",
     `paid ${agentRun.paid} HBAR · x402`,
     "hedera testnet tx confirmed",
     `${agentRun.optionsScanned} options analyzed · scored against budget`,
     `match found · ${matchedFlight.airline} ${matchedFlight.flightNo} ${money(matchedFlight.price)}`,
+    ...(trip.autoHold
+      ? gate.ok
+        ? [
+            "POST /holds · HTTP 402 · payment required",
+            `hold fee ${money(quote.fee)} paid · non-refundable`,
+            `deposit ${money(quote.deposit)} escrowed · refundable`,
+            `seat held · price locked for ${trip.holdHours}h`,
+          ]
+        : [`hold skipped · ${gate.reason}`]
+      : []),
     `email sent to ${trip.email}`,
   ];
 
@@ -80,6 +108,27 @@ function RequestPage() {
     const id = setTimeout(() => setStep((s) => s + 1), step === 0 ? 300 : 620);
     return () => clearTimeout(id);
   }, [started, step, monitorLog.length]);
+
+  const emailedNow = started && step >= monitorLog.length;
+
+  useEffect(() => {
+    if (!emailedNow || !gate.ok || holdPlaced.current) return;
+    holdPlaced.current = true;
+    placeHold({
+      trip,
+      flightId: matchedFlight.id,
+      fareIndex: 1,
+      priceLocked: matchedFlight.price,
+      hours: trip.holdHours,
+    })
+      .then(setHold)
+      .catch(() => {
+        holdPlaced.current = false;
+      });
+  }, [emailedNow, gate.ok, trip]);
+
+  const holdLeft = useCountdown(hold?.expiresAt ?? null);
+  const holdLive = isActive(hold, Date.now()) && holdLeft > 0;
 
   const set = <K extends keyof Trip>(key: K, value: Trip[K]) =>
     setTrip((t) => ({ ...t, [key]: value }));
@@ -159,8 +208,12 @@ function RequestPage() {
                   {[
                     { k: "Route", v: `${trip.fromCode} → ${trip.toCode}` },
                     { k: "Dates", v: `${nights ?? "—"} nights` },
-                    { k: "Budget", v: `${money(trip.budget)}` },
-                    { k: "Data paid", v: step >= 4 ? `${agentRun.paid} HBAR` : "—" },
+                    holdLive
+                      ? { k: "Hold fee · paid", v: money(hold!.fee) }
+                      : { k: "Budget", v: `${money(trip.budget)}` },
+                    holdLive
+                      ? { k: "Deposit · escrowed", v: money(hold!.deposit) }
+                      : { k: "Data paid", v: step >= 4 ? `${agentRun.paid} HBAR` : "—" },
                   ].map((s) => (
                     <div key={s.k} className="chip rounded-xl p-3">
                       <span className="block font-mono text-[9.5px] uppercase tracking-[0.14em] text-steel">
@@ -189,6 +242,20 @@ function RequestPage() {
                     </div>
                   )}
                 </div>
+
+                {holdLive && (
+                  <div className="logline mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/35 bg-mint/[0.06] px-4 py-3">
+                    <p className="inline-flex items-center gap-2 font-mono text-[12px] text-mint">
+                      <Lock className="size-3.5" />
+                      seat held · {matchedFlight.airline} {matchedFlight.flightNo} · price locked at{" "}
+                      {money(matchedFlight.price)}
+                    </p>
+                    <p className="inline-flex items-center gap-2 font-mono text-[12px] text-ink">
+                      <Timer className="size-3.5 text-mint" />
+                      {fmtCountdown(holdLeft)} left
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* the email the agent sent — clicking it opens the matched flight */}
@@ -218,14 +285,35 @@ function RequestPage() {
                       <span className="font-mono text-[11px] text-steel">just now</span>
                     </div>
                     <p className="mt-3.5 text-[15px] font-semibold text-ink">
-                      ✈️ Match found — {matchedFlight.airline} {matchedFlight.flightNo} for{" "}
+                      {holdLive ? "🔒 Seat held — " : "✈️ Match found — "}
+                      {matchedFlight.airline} {matchedFlight.flightNo} for{" "}
                       {money(matchedFlight.price)}
+                      {holdLive && (
+                        <span className="text-mint"> · {fmtCountdown(holdLeft)} left</span>
+                      )}
                     </p>
                     <p className="mt-1.5 text-[13px] leading-relaxed text-steel">
-                      {trip.from} → {trip.to} · direct · {matchedFlight.duration}. I paid{" "}
-                      {agentRun.paid} HBAR to unlock live fares and found 4 options under your{" "}
-                      {money(trip.budget)} budget. Open to see the full flight and book it.
+                      {trip.from} → {trip.to} · direct · {matchedFlight.duration}.{" "}
+                      {holdLive ? (
+                        <>
+                          I paid {money(hold!.fee)} to take this seat off the market and escrowed{" "}
+                          {money(hold!.deposit)} as a refundable deposit — your price is locked
+                          until the timer runs out. Open it to book, or release the hold and the
+                          deposit comes straight back.
+                        </>
+                      ) : (
+                        <>
+                          I paid {agentRun.paid} HBAR to unlock live fares and found 4 options under
+                          your {money(trip.budget)} budget. Open to see the full flight and book it.
+                        </>
+                      )}
                     </p>
+                    {holdLive && (
+                      <p className="mt-2.5 font-mono text-[10.5px] text-steel">
+                        escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
+                        {hold!.mode === "simulated" && " · local"}
+                      </p>
+                    )}
                     <span className="mt-4 inline-flex items-center gap-2 rounded-lg bg-mint px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-void">
                       <MailOpen className="size-3.5" />
                       Open the matched flight
@@ -449,6 +537,117 @@ function RequestPage() {
                     placeholder="you@example.com"
                   />
                 </label>
+              </div>
+
+              {/* auto-hold — the agent's authority to buy an option on the seat */}
+              <div className="chip rounded-xl px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => set("autoHold", !trip.autoHold)}
+                  className="flex w-full items-center justify-between gap-4 text-left"
+                >
+                  <span>
+                    <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-steel">
+                      <Lock className="size-3.5" />
+                      Auto-hold the seat
+                    </span>
+                    <span className="mt-1 block text-[13px] leading-relaxed text-steel">
+                      Let the agent pay a small fee to take the seat off the market and lock the
+                      price while you decide.
+                    </span>
+                  </span>
+                  <span
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                      trip.autoHold ? "bg-mint/80" : "bg-edge"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 size-4 rounded-full bg-void transition-all ${
+                        trip.autoHold ? "left-[1.15rem]" : "left-0.5"
+                      }`}
+                    />
+                  </span>
+                </button>
+
+                {trip.autoHold && (
+                  <div className="mt-4 space-y-3 border-t border-edge pt-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <label className="rounded-lg bg-white/[0.04] px-3.5 py-3">
+                        <span className="block font-mono text-[9.5px] uppercase tracking-[0.15em] text-steel">
+                          Max hold fee
+                        </span>
+                        <span className="mt-1 flex items-baseline font-mono text-lg font-bold text-ink">
+                          $
+                          <input
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={0.5}
+                            value={trip.maxHoldFee}
+                            onChange={(e) =>
+                              set("maxHoldFee", Math.min(20, Math.max(0, Number(e.target.value))))
+                            }
+                            className="nospin w-full bg-transparent font-mono text-lg font-bold text-ink outline-none"
+                          />
+                        </span>
+                        <span className="font-mono text-[10px] text-steel">non-refundable</span>
+                      </label>
+
+                      <label className="rounded-lg bg-white/[0.04] px-3.5 py-3">
+                        <span className="block font-mono text-[9.5px] uppercase tracking-[0.15em] text-steel">
+                          Max deposit
+                        </span>
+                        <span className="mt-1 flex items-baseline font-mono text-lg font-bold text-ink">
+                          $
+                          <input
+                            type="number"
+                            min={0}
+                            max={500}
+                            step={5}
+                            value={trip.maxDeposit}
+                            onChange={(e) =>
+                              set("maxDeposit", Math.min(500, Math.max(0, Number(e.target.value))))
+                            }
+                            className="nospin w-full bg-transparent font-mono text-lg font-bold text-ink outline-none"
+                          />
+                        </span>
+                        <span className="font-mono text-[10px] text-steel">
+                          escrowed, refundable
+                        </span>
+                      </label>
+
+                      <div className="rounded-lg bg-white/[0.04] px-3.5 py-3">
+                        <span className="block font-mono text-[9.5px] uppercase tracking-[0.15em] text-steel">
+                          Hold window
+                        </span>
+                        <div className="mt-1.5 flex gap-1.5">
+                          {holdWindows.map((h) => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => set("holdHours", h)}
+                              className={`flex-1 rounded-md py-1.5 font-mono text-[11px] transition-colors ${
+                                trip.holdHours === h
+                                  ? "bg-mint/15 font-bold text-mint ring-1 ring-mint/40"
+                                  : "text-steel hover:text-ink"
+                              }`}
+                            >
+                              {h}h
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="font-mono text-[11px] leading-relaxed text-steel">
+                      For this trip the agent would pay{" "}
+                      <span className="text-mint">{money(quote.fee)}</span> to hold the seat and
+                      escrow <span className="text-mint">{money(quote.deposit)}</span> — the deposit
+                      is credited to your ticket, or refunded in full if you let the hold go. Above
+                      these caps the agent asks you first.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button

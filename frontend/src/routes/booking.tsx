@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, Loader2, AlertCircle, Lock } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import {
   agentRun,
@@ -15,6 +15,7 @@ import {
   type Trip,
 } from "@/lib/trip";
 import { confirmBooking, type BookingConfirmation } from "@/lib/api";
+import { coversFlight, loadHold, markBooked, shortTx, type Hold } from "@/lib/hold";
 import { getWalletAddress } from "@/lib/x402-client";
 
 export const Route = createFileRoute("/booking")({
@@ -48,12 +49,14 @@ function Booking() {
   const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string>("Loading...");
+  const [hold, setHold] = useState<Hold | null>(null);
 
   useEffect(() => {
     setTrip(loadTrip());
     const sel = loadSelection();
     setFlightId(sel.flightId);
     setFareIndex(sel.fareIndex);
+    setHold(loadHold());
     try {
       setWalletAddress(getWalletAddress());
     } catch {
@@ -65,6 +68,10 @@ function Booking() {
   const back = returnLegFor(f.id);
   const fare = f.fares[fareIndex] ?? f.fares[0]!;
   const total = (f.price + fare.delta) * trip.passengers;
+  const holdApplies =
+    !!hold && hold.status === "held" && hold.expiresAt > Date.now() && coversFlight(hold, f.id);
+  const credit = holdApplies ? hold!.deposit : 0;
+  const balanceDue = Math.max(0, total - credit);
 
   const handleConfirm = async () => {
     setState("signing");
@@ -79,6 +86,7 @@ function Booking() {
         email: trip.email,
       });
       setConfirmation(result.confirmation);
+      if (holdApplies && hold) setHold(markBooked(hold));
       setState("done");
     } catch (err) {
       console.error("Booking error:", err);
@@ -123,15 +131,42 @@ function Booking() {
               </div>
             ))}
             <div className="mt-1 flex justify-between border-t border-edge pt-2.5">
-              <span className="text-steel">Total</span>
-              <span className="text-base font-bold text-mint">{money(total)}</span>
+              <span className="text-steel">Ticket total</span>
+              <span className="text-ink">{money(total)}</span>
+            </div>
+            {holdApplies && (
+              <>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-steel">Hold fee · paid</span>
+                  <span className="text-steel">{money(hold!.fee)}</span>
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-mint">Deposit in escrow · credited</span>
+                  <span className="text-mint">−{money(hold!.deposit)}</span>
+                </div>
+              </>
+            )}
+            <div className="mt-1 flex justify-between border-t border-edge pt-2.5">
+              <span className="text-steel">{holdApplies ? "Balance due" : "Due now"}</span>
+              <span className="text-base font-bold text-mint">{money(balanceDue)}</span>
             </div>
           </div>
+
+          {holdApplies && (
+            <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-mint/35 bg-mint/[0.06] px-4 py-2.5 font-mono text-[11px] text-mint">
+              <Lock className="size-3.5 shrink-0" />
+              <span>
+                seat held · deposit {money(hold!.deposit)} in escrow {shortTx(hold!.escrow)}
+              </span>
+            </div>
+          )}
 
           {/* Wallet info */}
           <div className="mt-3 rounded-lg bg-white/5 px-4 py-2.5 font-mono text-[11px]">
             <span className="text-steel">Wallet: </span>
-            <span className="text-ink">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+            <span className="text-ink">
+              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            </span>
           </div>
 
           {state === "done" && confirmation ? (
@@ -184,6 +219,9 @@ function Booking() {
               "Monitored fares for your request",
               `Paid ${agentRun.paid} HBAR for flight data`,
               `Found ${f.airline} ${f.flightNo} at ${money(f.price)}`,
+              ...(holdApplies
+                ? [`Held the seat · ${money(hold!.fee)} fee, ${money(hold!.deposit)} escrowed`]
+                : []),
               `Emailed ${trip.email}`,
             ].map((s) => (
               <li
