@@ -29,7 +29,7 @@ export const Route = createFileRoute("/booking")({
       { property: "og:title", content: "Confirm & Pay — Book Your Flight" },
       {
         property: "og:description",
-        content: "Pay $0.10 USDC to confirm the booking the agent found for you.",
+        content: "Pay 1 HBAR to confirm the booking the agent found for you.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -115,7 +115,7 @@ function Booking() {
               { k: "Dates", v: `${fmtDate(trip.depart)} – ${fmtDate(trip.ret)}` },
               { k: "Travellers", v: `${trip.passengers} · ${f.cabin}` },
               { k: "Fare", v: `${fare.name}` },
-              { k: "Payment", v: "$0.10 USDC · Base Sepolia" },
+              { k: "Payment", v: "1 HBAR · Hedera Testnet" },
             ].map((s) => (
               <div key={s.k} className="flex justify-between py-1.5">
                 <span className="text-steel">{s.k}</span>
@@ -128,10 +128,10 @@ function Booking() {
             </div>
           </div>
 
-          {/* Wallet info */}
+          {/* Account info */}
           <div className="mt-3 rounded-lg bg-white/5 px-4 py-2.5 font-mono text-[11px]">
-            <span className="text-steel">Wallet: </span>
-            <span className="text-ink">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+            <span className="text-steel">Account: </span>
+            <span className="text-ink">{walletAddress}</span>
           </div>
 
           {state === "done" && confirmation ? (
@@ -164,7 +164,7 @@ function Booking() {
                   {state === "signing" ? "Signing..." : "Processing payment..."}
                 </span>
               ) : (
-                "Confirm & Pay $0.10"
+                "Confirm & Pay 1 HBAR"
               )}
             </button>
           )}

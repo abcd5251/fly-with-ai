@@ -2,21 +2,21 @@ import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
-import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { ExactHederaScheme } from "@x402/hedera/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { flights, flightById, returnLegFor } from "./data/flights.js";
 
 const app = express();
 
-// Seller's receiving wallet address
-const evmAddress = process.env.EVM_ADDRESS;
-if (!evmAddress) {
-  console.error("Error: EVM_ADDRESS environment variable is required");
-  console.error("Please copy .env.example to .env and set your wallet address");
+// Seller's Hedera account ID
+const hederaAccountId = process.env.HEDERA_ACCOUNT_ID;
+if (!hederaAccountId) {
+  console.error("Error: HEDERA_ACCOUNT_ID environment variable is required");
+  console.error("Please copy .env.example to .env and set your Hedera account ID");
   process.exit(1);
 }
 
-console.log(`Seller wallet address: ${evmAddress}`);
+console.log(`Seller Hedera account: ${hederaAccountId}`);
 
 // CORS middleware - must be before payment middleware
 app.use(
@@ -31,9 +31,9 @@ app.use(
 // JSON body parser
 app.use(express.json());
 
-// Create facilitator client (testnet)
+// Create facilitator client (Hedera testnet via Blocky402)
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: "https://x402.org/facilitator",
+  url: "https://api.testnet.blocky402.com",
 });
 
 // Configure payment middleware - only POST /booking requires payment
@@ -44,9 +44,12 @@ app.use(
         accepts: [
           {
             scheme: "exact",
-            price: "$0.10", // 10 cents USDC
-            network: "eip155:84532", // Base Sepolia
-            payTo: evmAddress,
+            network: "hedera:testnet",
+            price: {
+              asset: "0.0.0", // HBAR
+              amount: "100000000", // 1 HBAR in tinybars
+            },
+            payTo: hederaAccountId,
           },
         ],
         description: "Flight booking",
@@ -54,8 +57,8 @@ app.use(
       },
     },
     new x402ResourceServer(facilitatorClient).register(
-      "eip155:84532",
-      new ExactEvmScheme()
+      "hedera:testnet",
+      new ExactHederaScheme()
     )
   )
 );
@@ -139,8 +142,8 @@ app.listen(PORT, () => {
   console.log(`\nEndpoints:`);
   console.log(`  GET  /flights/search - Free: list all flights`);
   console.log(`  GET  /flights/:id    - Free: flight details`);
-  console.log(`  POST /booking        - Paid: $0.10 USDC on Base Sepolia`);
+  console.log(`  POST /booking        - Paid: 1 HBAR on Hedera Testnet`);
   console.log(`  GET  /health         - Free: health check`);
-  console.log(`\nFacilitator: https://x402.org/facilitator (testnet)`);
-  console.log(`Network: Base Sepolia (eip155:84532)`);
+  console.log(`\nFacilitator: https://api.testnet.blocky402.com`);
+  console.log(`Network: Hedera Testnet (hedera:testnet)`);
 });
