@@ -188,7 +188,6 @@ fly402/
 | Asset | HBAR (`0.0.0`) |
 | Amount | 1 HBAR (100,000,000 tinybars) |
 | Facilitator | `https://api.testnet.blocky402.com` |
-| Fee Payer | `0.0.7162784` (Blocky402 testnet) |
 
 ## Technologies
 
