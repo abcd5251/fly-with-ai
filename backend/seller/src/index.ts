@@ -8,6 +8,7 @@ import { flights, flightById, returnLegFor } from "./data/flights.js";
 import type { Flight } from "./data/flights.js";
 import { searchLiveFlights, serpApiKey } from "./lib/serpapi.js";
 import { closeHold, escrowContract, getHoldById, openHold, snapshot } from "./lib/escrow.js";
+import { usdToHbar, hbarToTinybars } from "./lib/hedera-client.js";
 
 const app = express();
 
@@ -71,14 +72,14 @@ app.use(
             network: "hedera:testnet",
             price: {
               asset: "0.0.0", // HBAR
-              // Max hold fee: ~$5 worth of HBAR (~100 HBAR at $0.05)
-              // The actual fee is calculated based on fare, this is the max
-              amount: "10000000000", // 100 HBAR in tinybars
+              // Max fee + deposit: ~$1 (~20 HBAR at $0.05 = 2B tinybars)
+              // For testing with limited testnet HBAR
+              amount: "2000000000", // 20 HBAR in tinybars
             },
             payTo: hederaAccountId,
           },
         ],
-        description: "Seat hold fee - locks seat price for 24h",
+        description: "Seat hold: fee (non-refundable) + deposit (escrowed, refundable)",
         mimeType: "application/json",
       },
     },
@@ -209,8 +210,18 @@ app.post("/holds", async (req, res) => {
 
   const fareTotal = flight.price * (Number(passengers) || 1);
   const window = Math.min(72, Math.max(1, Number(hours) || 24));
-  const fee = Math.max(1, Math.round(fareTotal * 0.005 * (window / 24) * 100) / 100);
-  const deposit = Math.min(60, Math.max(10, Math.round(fareTotal * 0.1)));
+
+  // For testing: use small fixed amounts that fit within 20 HBAR (~$1 at $0.05/HBAR)
+  // Fee: $0.20 (non-refundable)
+  // Deposit: $0.80 (refundable)
+  // Total: $1.00 = 20 HBAR
+  const fee = 0.20;
+  const deposit = 0.80;
+
+  // Total payment via x402: fee (to seller) + deposit (forwarded to escrow)
+  const totalUsd = fee + deposit;
+  const totalHbar = usdToHbar(totalUsd);
+  const totalTinybars = hbarToTinybars(totalHbar);
 
   // Extract the x402 payment transaction ID from headers (if present)
   const paymentHeader = req.headers["x-payment"] as string | undefined;
@@ -220,6 +231,8 @@ app.post("/holds", async (req, res) => {
     // For now, we'll use a placeholder; the actual tx comes from settlement
     feeTx = `x402:${Date.now().toString(16)}`;
   }
+
+  console.log(`Hold request: fee=$${fee} + deposit=$${deposit} = $${totalUsd} (${totalHbar} HBAR)`);
 
   try {
     const entry = await openHold({
@@ -242,6 +255,14 @@ app.post("/holds", async (req, res) => {
       expiresAt: new Date(entry.expiresAt).toISOString(),
       fee: entry.fee,
       deposit: entry.deposit,
+      // Payment info: buyer pays fee + deposit via x402, seller forwards deposit to escrow
+      payment: {
+        totalUsd: totalUsd,
+        totalHbar: totalHbar,
+        totalTinybars: totalTinybars,
+        feeUsd: fee,
+        depositUsd: deposit,
+      },
       escrow: escrowContract().address ?? "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170",
       feeTx: entry.feeTx,
       depositTx: entry.depositTx,

@@ -95,11 +95,21 @@ export type HoldRequest = {
   email: string;
 };
 
+export type HoldPaymentInfo = {
+  totalUsd: number;
+  totalHbar: number;
+  totalTinybars: string;
+  feeUsd: number;
+  depositUsd: number;
+};
+
 export type HoldResponse = {
   holdId: string;
   expiresAt: string;
   fee: number;
   deposit: number;
+  /** Payment breakdown: buyer pays fee + deposit via x402 */
+  payment: HoldPaymentInfo;
   escrow: string;
   feeTx: string;
   depositTx: string;
@@ -108,33 +118,77 @@ export type HoldResponse = {
   contractError?: string;
 };
 
-function payingFetch(): typeof fetch {
+export type HoldRequestResult =
+  | { ok: true; data: HoldResponse }
+  | { ok: false; error: string; status?: number };
+
+function payingFetch(): { fetch: typeof fetch; usingX402: boolean } {
+  console.log("[api] payingFetch() called");
   try {
-    return getX402Fetch();
-  } catch {
-    return fetch; // no wallet configured — will get 402 but demo can still show UI
+    const x402Fetch = getX402Fetch();
+    console.log("[api] Got x402 fetch wrapper successfully");
+    return { fetch: x402Fetch, usingX402: true };
+  } catch (e) {
+    console.error("[api] x402 not available, using regular fetch:", e instanceof Error ? e.message : e);
+    if (e instanceof Error && e.stack) {
+      console.error("[api] Stack:", e.stack);
+    }
+    return { fetch, usingX402: false };
   }
 }
 
-export async function requestHoldOnChain(req: HoldRequest): Promise<HoldResponse | null> {
+export async function requestHoldOnChain(req: HoldRequest): Promise<HoldRequestResult> {
+  console.log("[hold] Requesting hold:", req);
+
+  const { fetch: fetchFn, usingX402 } = payingFetch();
+  console.log("[hold] Using x402:", usingX402);
+
+  if (!usingX402) {
+    console.warn("[hold] x402 not available — payment will fail");
+  }
+
   try {
-    const res = await payingFetch()(`${API_URL}/holds`, {
+    const res = await fetchFn(`${API_URL}/holds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     });
+
+    console.log("[hold] Response status:", res.status);
+
     if (!res.ok) {
-      // 402 means payment required but wasn't provided (no wallet)
+      const errorBody = await res.text();
+      console.error("[hold] Request failed:", res.status, res.statusText);
+      console.error("[hold] Response body:", errorBody);
+
       if (res.status === 402) {
-        console.warn("[hold] 402 Payment Required — wallet not configured");
+        console.error("[hold] 402 Payment Required — x402 payment failed or wallet not configured");
+        console.error("[hold] Check that VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are set in frontend/.env");
+        console.error("[hold] Response headers:", Object.fromEntries(res.headers.entries()));
+        return {
+          ok: false,
+          error: "Payment required. Check that your Hedera wallet is configured in frontend/.env",
+          status: 402,
+        };
       }
-      return null;
+      return {
+        ok: false,
+        error: errorBody || res.statusText,
+        status: res.status,
+      };
     }
-    return (await res.json()) as HoldResponse;
+
+    const data = (await res.json()) as HoldResponse;
+    console.log("[hold] Hold created successfully:", data.holdId);
+    console.log("[hold] Payment:", data.payment);
+    return { ok: true, data };
   } catch (e) {
-    // no wallet configured, or the seller has no /holds endpoint yet
-    console.error("[hold] Failed to request hold:", e);
-    return null;
+    console.error("[hold] Exception during hold request:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    if (e instanceof Error) {
+      console.error("[hold] Error stack:", e.stack);
+    }
+    return { ok: false, error: msg };
   }
 }
 

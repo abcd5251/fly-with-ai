@@ -728,6 +728,12 @@ function MatchPage() {
                 escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
                 {hold!.mode === "simulated" && " · local"}
               </p>
+              {hold!.requestError && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded bg-red-500/15 px-2 py-1 font-mono text-[10px] text-red-400">
+                  <TriangleAlert className="size-3" />
+                  Request failed: {hold!.requestError}
+                </p>
+              )}
               {hold!.contractError && (
                 <p className="mt-2 inline-flex items-center gap-1.5 rounded bg-amber/15 px-2 py-1 font-mono text-[10px] text-amber">
                   <TriangleAlert className="size-3" />
@@ -737,10 +743,21 @@ function MatchPage() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-2 gap-2.5 sm:w-[300px]">
+              <div className="grid grid-cols-3 gap-2.5 sm:w-[420px]">
                 <div className="chip rounded-xl p-3">
                   <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
-                    Hold fee · paid
+                    x402 payment
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
+                    {hold!.payment ? `${hold!.payment.totalHbar} HBAR` : money(hold!.fee + hold!.deposit)}
+                  </span>
+                  <span className="font-mono text-[9.5px] text-steel">
+                    {money(hold!.fee + hold!.deposit)} total
+                  </span>
+                </div>
+                <div className="chip rounded-xl p-3">
+                  <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
+                    Hold fee
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-ink">
                     {money(hold!.fee)}
@@ -749,12 +766,12 @@ function MatchPage() {
                 </div>
                 <div className="chip rounded-xl p-3">
                   <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
-                    Deposit · escrowed
+                    Deposit
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
                     {money(hold!.deposit)}
                   </span>
-                  <span className="font-mono text-[9.5px] text-steel">credited at booking</span>
+                  <span className="font-mono text-[9.5px] text-steel">→ escrow</span>
                 </div>
               </div>
 
@@ -823,7 +840,7 @@ function MatchPage() {
                 disabled={holdBusy || !gate.ok}
                 className="chrome bevel rounded-lg px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-void disabled:opacity-60"
               >
-                {holdBusy ? "moving…" : `Move hold here · ${money(quote.fee)}`}
+                {holdBusy ? "moving…" : `Move hold here · ${money(quote.fee + quote.deposit)}`}
               </button>
             </div>
           </div>
@@ -854,7 +871,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat again · ${money(quote.fee)}`}
+              {holdBusy ? "holding…" : `Hold this seat again · ${money(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
@@ -867,8 +884,8 @@ function MatchPage() {
             </p>
             <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-ink">
               {f.seatsLeft} seats left at this fare — anyone can take them while you decide. Hold it
-              for {trip.holdHours}h: {money(quote.fee)} fee, plus {money(quote.deposit)} escrowed as
-              a deposit that comes off your ticket price.
+              for {trip.holdHours}h: pay {money(quote.fee + quote.deposit)} via x402 ({money(quote.fee)} fee
+              + {money(quote.deposit)} deposit). The deposit is escrowed and credited at booking.
             </p>
             {!gate.ok && (
               <p className="mt-1.5 font-mono text-[11px] text-amber">
@@ -883,7 +900,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat · ${money(quote.fee)}`}
+              {holdBusy ? "holding…" : `Hold this seat · ${money(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
