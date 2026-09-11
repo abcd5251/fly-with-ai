@@ -847,7 +847,7 @@ function MatchPage() {
       <section className="mt-9">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <h2 className="text-xl font-semibold tracking-tight">
-            {catalog.flights.length} options unlocked
+            {catalog.loading ? "Pricing live fares" : `${catalog.flights.length} options unlocked`}
             <span className="ml-2 font-mono text-[12px] font-normal text-steel">
               ranked against your {money(trip.budget)} budget
             </span>
@@ -855,20 +855,35 @@ function MatchPage() {
           <p className="font-mono text-[11px] text-steel">round trip · per person · taxes in</p>
         </div>
         <div className="mt-4 space-y-3">
-          {catalog.flights.map((opt) => (
-            <OptionRow
-              key={opt.id}
-              f={opt}
-              selected={opt.id === f.id}
-              budget={trip.budget}
-              onSelect={() => {
-                setFlightId(opt.id);
-                setFareIndex(1);
-                pinned.current = true;
-                saveSelection({ flightId: opt.id, fareIndex: 1 });
-              }}
-            />
-          ))}
+          {catalog.loading &&
+            [0, 1, 2, 3].map((i) => (
+              <div
+                key={`skeleton-${i}`}
+                className="flex items-center gap-4 rounded-2xl border border-edge bg-panel p-5"
+              >
+                <div className="size-10 shrink-0 animate-pulse rounded-lg bg-white/[0.06]" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-28 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-2.5 w-full max-w-md animate-pulse rounded bg-white/[0.04]" />
+                </div>
+                <div className="h-5 w-16 animate-pulse rounded bg-white/[0.06]" />
+              </div>
+            ))}
+          {!catalog.loading &&
+            catalog.flights.map((opt) => (
+              <OptionRow
+                key={opt.id}
+                f={opt}
+                selected={opt.id === f.id}
+                budget={trip.budget}
+                onSelect={() => {
+                  setFlightId(opt.id);
+                  setFareIndex(1);
+                  pinned.current = true;
+                  saveSelection({ flightId: opt.id, fareIndex: 1 });
+                }}
+              />
+            ))}
         </div>
       </section>
 

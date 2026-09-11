@@ -20,7 +20,7 @@ export function getX402Fetch(): typeof fetch {
     "eip155:84532",
     new ExactEvmScheme(signer, {
       84532: { rpcUrl: "https://sepolia.base.org" },
-    })
+    }),
   );
   cachedFetch = wrapFetchWithPayment(fetch, client);
   return cachedFetch;
