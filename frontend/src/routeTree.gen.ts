@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as BookingRouteImport } from './routes/booking'
+import { Route as EscrowRouteImport } from './routes/escrow'
 import { Route as FlightRouteImport } from './routes/flight'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const BookingRoute = BookingRouteImport.update({
   path: '/booking',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EscrowRoute = EscrowRouteImport.update({
+  id: '/escrow',
+  path: '/escrow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FlightRoute = FlightRouteImport.update({
   id: '/flight',
   path: '/flight',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/booking': typeof BookingRoute
+  '/escrow': typeof EscrowRoute
   '/flight': typeof FlightRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/booking': typeof BookingRoute
+  '/escrow': typeof EscrowRoute
   '/flight': typeof FlightRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/booking': typeof BookingRoute
+  '/escrow': typeof EscrowRoute
   '/flight': typeof FlightRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/activity' | '/booking' | '/flight'
+  fullPaths: '/' | '/activity' | '/booking' | '/escrow' | '/flight'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/booking' | '/flight'
-  id: '__root__' | '/' | '/activity' | '/booking' | '/flight'
+  to: '/' | '/activity' | '/booking' | '/escrow' | '/flight'
+  id: '__root__' | '/' | '/activity' | '/booking' | '/escrow' | '/flight'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
   BookingRoute: typeof BookingRoute
+  EscrowRoute: typeof EscrowRoute
   FlightRoute: typeof FlightRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BookingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/escrow': {
+      id: '/escrow'
+      path: '/escrow'
+      fullPath: '/escrow'
+      preLoaderRoute: typeof EscrowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/flight': {
       id: '/flight'
       path: '/flight'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
   BookingRoute: BookingRoute,
+  EscrowRoute: EscrowRoute,
   FlightRoute: FlightRoute,
 }
 export const routeTree = rootRouteImport

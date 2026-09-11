@@ -10,6 +10,13 @@ export type Trip = {
   cabin: "Economy" | "Premium" | "Business";
   directOnly: boolean;
   email: string;
+  /** Let the agent buy a short-lived hold on the seat when it finds a match. */
+  autoHold: boolean;
+  /** Hard caps the agent cannot spend past, in USD. */
+  maxHoldFee: number;
+  maxDeposit: number;
+  /** How long the seat stays held, in hours. */
+  holdHours: number;
 };
 
 export const defaultTrip: Trip = {
@@ -17,13 +24,17 @@ export const defaultTrip: Trip = {
   fromCode: "TPE",
   to: "Tokyo",
   toCode: "TYO",
-  depart: "2026-10-20",
-  ret: "2026-10-25",
-  budget: 500,
+  depart: "2026-09-23",
+  ret: "2026-09-30",
+  budget: 550,
   passengers: 1,
   cabin: "Economy",
   directOnly: true,
   email: "you@example.com",
+  autoHold: true,
+  maxHoldFee: 3,
+  maxDeposit: 60,
+  holdHours: 24,
 };
 
 export const cityCodes: Record<string, string> = {
@@ -97,6 +108,11 @@ export type Flight = {
   amenities: Amenity[];
   tag?: string;
   fares: Fare[];
+  /** true when the row came from the live Google Flights query */
+  live?: boolean;
+  co2kg?: number;
+  oftenDelayed?: boolean;
+  departureToken?: string;
 };
 
 function fareSet(opts: {
@@ -411,6 +427,17 @@ export function saveSelection(sel: Selection) {
   window.sessionStorage.setItem(SEL, JSON.stringify(sel));
 }
 
+/** null when the traveller hasn't picked anything yet. */
+export function storedSelection(): Selection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SEL);
+    return raw ? (JSON.parse(raw) as Selection) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function loadSelection(): Selection {
   if (typeof window === "undefined") return defaultSelection;
   try {
@@ -427,7 +454,11 @@ export function flightById(id: string): Flight {
 
 /** 1144 → "$1,144" */
 export function money(n: number) {
-  return `$${Math.round(n).toLocaleString("en-US")}`;
+  const v = Math.round(n * 100) / 100;
+  return `$${v.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /** "2026-10-20" → "Tue, Oct 20" (falls back to the raw string). */

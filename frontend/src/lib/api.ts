@@ -44,7 +44,7 @@ export async function searchFlights(): Promise<FlightSummary[]> {
 }
 
 export async function getFlightDetails(
-  id: string
+  id: string,
 ): Promise<{ flight: Flight; returnLeg: ReturnLeg }> {
   const res = await fetch(`${API_URL}/flights/${id}`);
   if (!res.ok) {
@@ -77,4 +77,156 @@ export async function confirmBooking(data: BookingData): Promise<BookingResponse
   }
 
   return res.json();
+}
+
+/* ---------------------------------------------------------------------------
+ * Seat holds — the agent buys a short-lived option on the seat.
+ *
+ * These call the seller the moment it exposes POST /holds. Until then every
+ * helper resolves to null and the caller falls back to a local hold, so the
+ * product flow runs end to end either way.
+ * ------------------------------------------------------------------------- */
+
+export type HoldRequest = {
+  flightId: string;
+  fareIndex: number;
+  passengers: number;
+  hours: number;
+  email: string;
+};
+
+export type HoldResponse = {
+  holdId: string;
+  expiresAt: string;
+  fee: number;
+  deposit: number;
+  escrow: string;
+  feeTx: string;
+  depositTx: string;
+};
+
+function payingFetch(): typeof fetch {
+  try {
+    return getX402Fetch();
+  } catch {
+    return fetch; // no wallet configured — /holds is free, keep the demo running
+  }
+}
+
+export async function requestHoldOnChain(req: HoldRequest): Promise<HoldResponse | null> {
+  try {
+    const res = await payingFetch()(`${API_URL}/holds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as HoldResponse;
+  } catch {
+    // no wallet configured, or the seller has no /holds endpoint yet
+    return null;
+  }
+}
+
+export async function releaseHoldOnChain(holdId: string): Promise<{ refundTx: string } | null> {
+  try {
+    const res = await fetch(`${API_URL}/holds/${holdId}/release`, { method: "POST" });
+    if (!res.ok) return null;
+    return (await res.json()) as { refundTx: string };
+  } catch {
+    return null;
+  }
+}
+
+export async function settleHoldOnChain(holdId: string): Promise<{ settleTx: string } | null> {
+  try {
+    const res = await fetch(`${API_URL}/holds/${holdId}/settle`, { method: "POST" });
+    if (!res.ok) return null;
+    return (await res.json()) as { settleTx: string };
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------- escrow vault */
+
+export type EscrowEntry = {
+  id: string;
+  flightNo: string;
+  airline: string;
+  route: string;
+  passengers: number;
+  priceLocked: number;
+  fee: number;
+  deposit: number;
+  status: "held" | "released" | "expired" | "settled";
+  createdAt: number;
+  expiresAt: number;
+  closedAt?: number;
+  depositTx: string;
+  refundTx?: string;
+  settleTx?: string;
+  chain: string;
+};
+
+export type EscrowSnapshot = {
+  tvl: number;
+  active: number;
+  totals: {
+    opened: number;
+    settled: number;
+    released: number;
+    expired: number;
+    feesPaid: number;
+    depositsSettled: number;
+    depositsRefunded: number;
+  };
+  avgWindowHours: number;
+  avgHeldMinutes: number;
+  contract: { address: string | null; network: string; explorer: string | null; deployed: boolean };
+  entries: EscrowEntry[];
+};
+
+export async function fetchEscrow(): Promise<EscrowSnapshot> {
+  const res = await fetch(`${API_URL}/escrow`);
+  if (!res.ok) throw new Error(`Failed to load escrow: ${res.statusText}`);
+  return (await res.json()) as EscrowSnapshot;
+}
+
+/* ---------------------------------------------------------------------------
+ * Flight catalog — live Google Flights rows (SerpApi, server-side) merged with
+ * the demo inventory by the seller.
+ * ------------------------------------------------------------------------- */
+
+export type CatalogResponse = {
+  flights: Flight[];
+  returnLegs: Record<string, ReturnLeg>;
+  live: number;
+  source: "serpapi" | "serpapi-cache" | "none";
+  fetchedAt: string | null;
+  insights?: { lowest?: number; level?: string; typicalRange?: [number, number] };
+  liveError?: string;
+};
+
+export type CatalogQuery = {
+  from: string;
+  to: string;
+  depart: string;
+  ret: string;
+  adults: number;
+  directOnly: boolean;
+};
+
+export async function fetchCatalog(q: CatalogQuery): Promise<CatalogResponse> {
+  const params = new URLSearchParams({
+    from: q.from,
+    to: q.to,
+    depart: q.depart,
+    return: q.ret,
+    adults: String(q.adults),
+    direct: String(q.directOnly),
+  });
+  const res = await fetch(`${API_URL}/flights/catalog?${params}`);
+  if (!res.ok) throw new Error(`Failed to load flights: ${res.statusText}`);
+  return (await res.json()) as CatalogResponse;
 }
