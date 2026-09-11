@@ -9,6 +9,7 @@ import type { Flight } from "./data/flights.js";
 import { searchLiveFlights, serpApiKey } from "./lib/serpapi.js";
 import { closeHold, escrowContract, getHoldById, openHold, snapshot } from "./lib/escrow.js";
 import { usdToHbar, hbarToTinybars } from "./lib/hedera-client.js";
+import { sendFlightMatchEmail, type FlightMatchData, type TripData, type HoldData } from "./lib/email.js";
 
 const app = express();
 
@@ -328,6 +329,37 @@ app.get("/escrow", (req, res) => {
   res.json(snapshot(Number(req.query["limit"] ?? 12) || 12));
 });
 
+// POST /notify/match - Send email notification when AI Monitor finds a matching flight
+app.post("/notify/match", async (req, res) => {
+  const { flight, trip, hold } = req.body ?? {};
+
+  if (!flight || !trip) {
+    res.status(400).json({ error: "Missing flight or trip data" });
+    return;
+  }
+
+  if (!trip.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trip.email)) {
+    res.status(400).json({ error: "Invalid email address" });
+    return;
+  }
+
+  console.log(`[notify] Sending match notification to ${trip.email} for ${flight.airline} ${flight.flightNo}`);
+
+  const result = await sendFlightMatchEmail(
+    flight as FlightMatchData,
+    trip as TripData,
+    (hold as HoldData) ?? null
+  );
+
+  if (!result.success) {
+    console.error(`[notify] Email failed: ${result.error}`);
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  res.json({ success: true, messageId: result.messageId });
+});
+
 // PAID endpoint
 
 // POST /booking - Requires x402 payment
@@ -380,6 +412,7 @@ app.listen(PORT, () => {
   );
   console.log(`  POST /holds          - Free: open a seat hold (deposit → escrow)`);
   console.log(`  GET  /escrow         - Free: escrow vault snapshot`);
+  console.log(`  POST /notify/match   - Free: send email when match found`);
   console.log(`  POST /booking        - Paid: $0.10 USDC on Base Sepolia`);
   const c = escrowContract();
   console.log(

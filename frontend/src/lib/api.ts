@@ -317,3 +317,72 @@ export async function fetchCatalog(q: CatalogQuery): Promise<CatalogResponse> {
   if (!res.ok) throw new Error(`Failed to load flights: ${res.statusText}`);
   return (await res.json()) as CatalogResponse;
 }
+
+/* ---------------------------------------------------------------------------
+ * Email notifications — when the AI Monitor finds a matching flight.
+ * ------------------------------------------------------------------------- */
+
+export type NotifyMatchRequest = {
+  flight: {
+    id: string;
+    airline: string;
+    flightNo: string;
+    fromCode: string;
+    toCode: string;
+    departTime: string;
+    arriveTime: string;
+    duration: string;
+    price: number;
+    stops: number;
+  };
+  trip: {
+    from: string;
+    fromCode: string;
+    to: string;
+    toCode: string;
+    depart: string;
+    ret: string;
+    budget: number;
+    passengers: number;
+    cabin: string;
+    email: string;
+  };
+  hold?: {
+    holdId?: string;
+    fee?: number;
+    deposit?: number;
+    expiresAt?: string;
+  };
+};
+
+export type NotifyMatchResponse = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+};
+
+/**
+ * Send a flight match notification email.
+ * Called when the AI Monitor finds a flight matching the user's criteria.
+ */
+export async function notifyMatch(req: NotifyMatchRequest): Promise<NotifyMatchResponse> {
+  try {
+    const res = await fetch(`${API_URL}/notify/match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      console.error("[notify] Request failed:", res.status, errorBody);
+      return { success: false, error: errorBody || res.statusText };
+    }
+
+    return (await res.json()) as NotifyMatchResponse;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[notify] Exception:", msg);
+    return { success: false, error: msg };
+  }
+}

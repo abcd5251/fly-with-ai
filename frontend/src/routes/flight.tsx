@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { z } from "zod";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -49,6 +50,7 @@ import {
 import { getHoldStatus } from "@/lib/api";
 import {
   agentRun,
+  decodeTripFromUrl,
   defaultTrip,
   fmtDate,
   flightById,
@@ -60,13 +62,22 @@ import {
   money,
   returnLegFor,
   saveSelection,
+  saveTrip,
   type Amenity,
   type Fare,
   type Flight,
   type Trip,
 } from "@/lib/trip";
 
+// Search params schema for deep linking from email
+const flightSearchSchema = z.object({
+  flightId: z.string().optional(),
+  fareIndex: z.coerce.number().optional(),
+  tripData: z.string().optional(), // Base64url-encoded Trip
+});
+
 export const Route = createFileRoute("/flight")({
+  validateSearch: flightSearchSchema,
   head: () => ({
     meta: [
       { title: "Match Found — Flight Details & Fare Options | TravelPay AI" },
@@ -454,6 +465,7 @@ function FareCard({
 
 function MatchPage() {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/flight" });
   const [trip, setTrip] = useState<Trip>(defaultTrip);
   const [flightId, setFlightId] = useState(matchedFlight.id);
   const [fareIndex, setFareIndex] = useState(1);
@@ -462,17 +474,41 @@ function MatchPage() {
   const [confirmRelease, setConfirmRelease] = useState(false);
 
   const pinned = useRef(false);
+  const hydratedFromUrl = useRef(false);
 
+  // Hydrate state from URL params (deep link from email) or session storage
   useEffect(() => {
-    setTrip(loadTrip());
-    const sel = storedSelection();
-    if (sel) {
-      setFlightId(sel.flightId);
-      setFareIndex(sel.fareIndex);
-      pinned.current = true;
+    if (hydratedFromUrl.current) return;
+    hydratedFromUrl.current = true;
+
+    // Check for deep link params from email
+    if (search.tripData) {
+      const decodedTrip = decodeTripFromUrl(search.tripData);
+      if (decodedTrip) {
+        setTrip(decodedTrip);
+        saveTrip(decodedTrip); // Persist to session for subsequent navigation
+      }
+    } else {
+      setTrip(loadTrip());
     }
+
+    // Set flight selection from URL or session storage
+    if (search.flightId) {
+      setFlightId(search.flightId);
+      setFareIndex(search.fareIndex ?? 1);
+      pinned.current = true;
+      saveSelection({ flightId: search.flightId, fareIndex: search.fareIndex ?? 1 });
+    } else {
+      const sel = storedSelection();
+      if (sel) {
+        setFlightId(sel.flightId);
+        setFareIndex(sel.fareIndex);
+        pinned.current = true;
+      }
+    }
+
     setHold(loadHold());
-  }, []);
+  }, [search.tripData, search.flightId, search.fareIndex]);
 
   const catalog = useCatalog(trip);
   const f = pickFlight(catalog, flightId);

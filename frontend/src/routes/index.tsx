@@ -39,6 +39,7 @@ import {
   saveTrip,
   type Trip,
 } from "@/lib/trip";
+import { notifyMatch } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,6 +72,7 @@ function RequestPage() {
   const [step, setStep] = useState(0);
   const [hold, setHold] = useState<Hold | null>(null);
   const holdPlaced = useRef(false);
+  const emailSent = useRef(false);
 
   useEffect(() => setTrip(loadTrip()), []);
 
@@ -135,6 +137,53 @@ function RequestPage() {
         holdPlaced.current = false;
       });
   }, [emailedNow, gate.ok, trip, match]);
+
+  // Send email notification when match is found
+  useEffect(() => {
+    if (!emailedNow || emailSent.current) return;
+    emailSent.current = true;
+
+    // Build flight match data for the notification
+    const flightData = {
+      id: match.id,
+      airline: match.airline,
+      flightNo: match.flightNo,
+      fromCode: match.fromCode,
+      toCode: match.toCode,
+      departTime: match.departTime,
+      arriveTime: match.arriveTime,
+      duration: match.duration,
+      price: match.price,
+      stops: match.stops,
+    };
+
+    // Build trip data for the notification
+    const tripData = {
+      from: trip.from,
+      fromCode: trip.fromCode,
+      to: trip.to,
+      toCode: trip.toCode,
+      depart: trip.depart,
+      ret: trip.ret,
+      budget: trip.budget,
+      passengers: trip.passengers,
+      cabin: trip.cabin,
+      email: trip.email,
+    };
+
+    notifyMatch({ flight: flightData, trip: tripData })
+      .then((res) => {
+        if (res.success) {
+          console.log("[monitor] Email notification sent:", res.messageId);
+        } else {
+          console.warn("[monitor] Email notification failed:", res.error);
+        }
+      })
+      .catch((err) => {
+        console.error("[monitor] Email notification error:", err);
+        emailSent.current = false; // Allow retry
+      });
+  }, [emailedNow, match, trip]);
 
   const holdLeft = useCountdown(hold?.expiresAt ?? null);
   const holdLive = isActive(hold, Date.now()) && holdLeft > 0;
