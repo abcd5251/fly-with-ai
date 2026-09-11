@@ -103,13 +103,16 @@ export type HoldResponse = {
   escrow: string;
   feeTx: string;
   depositTx: string;
+  chain: string;
+  /** Error message if contract call failed (hold still works in simulated mode) */
+  contractError?: string;
 };
 
 function payingFetch(): typeof fetch {
   try {
     return getX402Fetch();
   } catch {
-    return fetch; // no wallet configured — /holds is free, keep the demo running
+    return fetch; // no wallet configured — will get 402 but demo can still show UI
   }
 }
 
@@ -120,10 +123,40 @@ export async function requestHoldOnChain(req: HoldRequest): Promise<HoldResponse
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // 402 means payment required but wasn't provided (no wallet)
+      if (res.status === 402) {
+        console.warn("[hold] 402 Payment Required — wallet not configured");
+      }
+      return null;
+    }
     return (await res.json()) as HoldResponse;
-  } catch {
+  } catch (e) {
     // no wallet configured, or the seller has no /holds endpoint yet
+    console.error("[hold] Failed to request hold:", e);
+    return null;
+  }
+}
+
+export type HoldStatusResponse = {
+  id: string;
+  status: "held" | "released" | "expired" | "settled";
+  depositTx: string;
+  refundTx?: string;
+  settleTx?: string;
+  chain: string;
+};
+
+/**
+ * Poll the hold status from the backend.
+ * Returns null if the hold doesn't exist or an error occurs.
+ */
+export async function getHoldStatus(holdId: string): Promise<HoldStatusResponse | null> {
+  try {
+    const res = await fetch(`${API_URL}/holds/${holdId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as HoldStatusResponse;
+  } catch {
     return null;
   }
 }

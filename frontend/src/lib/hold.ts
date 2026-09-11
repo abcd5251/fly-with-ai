@@ -32,6 +32,8 @@ export type Hold = {
   expiresAt: number;
   status: HoldStatus;
   mode: HoldMode;
+  /** Error message if contract call failed (hold still works in simulated mode) */
+  contractError?: string;
 };
 
 export const holdWindows = [6, 24] as const;
@@ -93,6 +95,9 @@ export async function placeHold(input: {
     email: trip.email,
   });
 
+  // Determine mode: "onchain" if we got a response and chain is not "simulated"
+  const isOnChain = onChain && onChain.chain !== "simulated";
+
   const hold: Hold = {
     id: onChain?.holdId ?? `h_${hex(6)}`,
     flightId,
@@ -107,7 +112,8 @@ export async function placeHold(input: {
     createdAt: now,
     expiresAt: onChain ? Date.parse(onChain.expiresAt) : now + hours * 3_600_000,
     status: "held",
-    mode: onChain ? "onchain" : "simulated",
+    mode: isOnChain ? "onchain" : "simulated",
+    ...(onChain?.contractError ? { contractError: onChain.contractError } : {}),
   };
 
   saveHold(hold);

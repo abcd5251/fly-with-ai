@@ -127,15 +127,16 @@ function Booking() {
           </div>
 
           {/* Account info */}
-          <div className="mt-3 rounded-lg bg-white/5 px-4 py-2.5 font-mono text-[11px]">
-            <span className="text-steel">Account: </span>
-            <span className="text-ink">{walletAddress}</span>
-        <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.25em] text-mint">
-          {state === "done" ? "booked" : "confirm & pay"}
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight">
-          {state === "done" ? "You're booked" : "Ready to book"}
-        </h1>
+          {/*<div className="mt-3 rounded-lg bg-white/5 px-4 py-2.5 font-mono text-[11px]">*/}
+            {/*<span className="text-steel">Account: </span>*/}
+            {/*<span className="text-ink">{walletAddress}</span>*/}
+          {/*</div>*/}
+        {/*<p className="mt-6 font-mono text-[11px] uppercase tracking-[0.25em] text-mint">*/}
+          {/*{state === "done" ? "booked" : "confirm & pay"}*/}
+        {/*</p>*/}
+        {/*<h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight">*/}
+          {/*{state === "done" ? "You're booked" : "Ready to book"}*/}
+        {/*</h1>*/}
 
         {/* what you're buying */}
         <div className="mt-7 rounded-2xl border border-edge bg-panel p-6">

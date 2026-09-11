@@ -42,9 +42,11 @@ import {
   placeHold,
   policyCheck,
   releaseHold,
+  saveHold,
   shortTx,
   type Hold,
 } from "@/lib/hold";
+import { getHoldStatus } from "@/lib/api";
 import {
   agentRun,
   defaultTrip,
@@ -516,6 +518,44 @@ function MatchPage() {
     }
   }, [hold, holdLeft]);
 
+  // poll hold status every 5s to get real tx hashes from the backend
+  useEffect(() => {
+    if (!hold || hold.status !== "held" || hold.mode !== "onchain") return;
+
+    const poll = async () => {
+      const status = await getHoldStatus(hold.id);
+      if (!status) return;
+
+      // update tx hashes if they've been confirmed
+      const newMode: Hold["mode"] = status.chain === "simulated" ? "simulated" : "onchain";
+      if (status.depositTx !== hold.depositTx || newMode !== hold.mode) {
+        const updated: Hold = {
+          ...hold,
+          depositTx: status.depositTx,
+          mode: newMode,
+        };
+        setHold(updated);
+        saveHold(updated);
+      }
+
+      // if hold was settled/released/expired on backend, update local state
+      if (status.status !== "held") {
+        const newStatus = status.status === "settled" ? "booked" : status.status;
+        const updated: Hold = {
+          ...hold,
+          status: newStatus,
+          ...(status.refundTx ? { refundTx: status.refundTx } : {}),
+        };
+        setHold(updated);
+        saveHold(updated);
+      }
+    };
+
+    const interval = setInterval(poll, 5000);
+    poll(); // initial poll
+    return () => clearInterval(interval);
+  }, [hold?.id, hold?.status, hold?.mode]);
+
   const takeHold = async (targetId: string) => {
     setHoldBusy(true);
     try {
@@ -688,6 +728,12 @@ function MatchPage() {
                 escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
                 {hold!.mode === "simulated" && " · local"}
               </p>
+              {hold!.contractError && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded bg-amber/15 px-2 py-1 font-mono text-[10px] text-amber">
+                  <TriangleAlert className="size-3" />
+                  Contract call failed: {hold!.contractError}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
