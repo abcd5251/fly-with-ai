@@ -7,7 +7,9 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { flights, flightById, returnLegFor } from "./data/flights.js";
 import type { Flight } from "./data/flights.js";
 import { searchLiveFlights, serpApiKey } from "./lib/serpapi.js";
-import { closeHold, escrowContract, openHold, snapshot } from "./lib/escrow.js";
+import { closeHold, escrowContract, getHoldById, openHold, snapshot } from "./lib/escrow.js";
+import { usdToHbar, hbarToTinybars } from "./lib/hedera-client.js";
+import { sendFlightMatchEmail, type FlightMatchData, type TripData, type HoldData } from "./lib/email.js";
 
 const app = express();
 
@@ -39,7 +41,13 @@ const facilitatorClient = new HTTPFacilitatorClient({
   url: "https://api.testnet.blocky402.com",
 });
 
-// Configure payment middleware - only POST /booking requires payment
+// Create resource server (reused across middleware)
+const resourceServer = new x402ResourceServer(facilitatorClient).register(
+  "hedera:testnet",
+  new ExactHederaScheme()
+);
+
+// Configure payment middleware - POST /booking and POST /holds require payment
 app.use(
   paymentMiddleware(
     {
@@ -58,11 +66,25 @@ app.use(
         description: "Flight booking",
         mimeType: "application/json",
       },
+      "POST /holds": {
+        accepts: [
+          {
+            scheme: "exact",
+            network: "hedera:testnet",
+            price: {
+              asset: "0.0.0", // HBAR
+              // Max fee + deposit: ~$1 (~20 HBAR at $0.05 = 2B tinybars)
+              // For testing with limited testnet HBAR
+              amount: "2000000000", // 20 HBAR in tinybars
+            },
+            payTo: hederaAccountId,
+          },
+        ],
+        description: "Seat hold: fee (non-refundable) + deposit (escrowed, refundable)",
+        mimeType: "application/json",
+      },
     },
-    new x402ResourceServer(facilitatorClient).register(
-      "hedera:testnet",
-      new ExactHederaScheme()
-    )
+    resourceServer
   )
 );
 
@@ -179,7 +201,7 @@ app.get("/flights/:id", (req, res) => {
 // SEAT HOLDS — the agent buys a short-lived option on a seat. The fee is a
 // one-way x402 payment; the deposit is locked in the HoldEscrow contract.
 
-app.post("/holds", (req, res) => {
+app.post("/holds", async (req, res) => {
   const { flightId, passengers = 1, hours = 24 } = req.body ?? {};
   const flight = liveCache.get(flightId) ?? flightById(flightId);
   if (!flight) {
@@ -189,56 +211,153 @@ app.post("/holds", (req, res) => {
 
   const fareTotal = flight.price * (Number(passengers) || 1);
   const window = Math.min(72, Math.max(1, Number(hours) || 24));
-  const fee = Math.max(1, Math.round(fareTotal * 0.005 * (window / 24) * 100) / 100);
-  const deposit = Math.min(60, Math.max(10, Math.round(fareTotal * 0.1)));
 
-  const entry = openHold({
-    flightId: flight.id,
-    flightNo: flight.flightNo,
-    airline: flight.airline,
-    route: `${flight.fromCode} → ${flight.toCode}`,
-    passengers: Number(passengers) || 1,
-    priceLocked: flight.price,
-    fee,
-    deposit,
-    hours: window,
-  });
+  // For testing: use small fixed amounts that fit within 20 HBAR (~$1 at $0.05/HBAR)
+  // Fee: $0.20 (non-refundable)
+  // Deposit: $0.80 (refundable)
+  // Total: $1.00 = 20 HBAR
+  const fee = 0.20;
+  const deposit = 0.80;
 
-  console.log(`Hold ${entry.id} opened · ${flight.flightNo} · deposit $${deposit} escrowed`);
+  // Total payment via x402: fee (to seller) + deposit (forwarded to escrow)
+  const totalUsd = fee + deposit;
+  const totalHbar = usdToHbar(totalUsd);
+  const totalTinybars = hbarToTinybars(totalHbar);
 
+  // Extract the x402 payment transaction ID from headers (if present)
+  const paymentHeader = req.headers["x-payment"] as string | undefined;
+  let feeTx: string | undefined;
+  if (paymentHeader) {
+    // The payment was verified by middleware — extract tx info if available
+    // For now, we'll use a placeholder; the actual tx comes from settlement
+    feeTx = `x402:${Date.now().toString(16)}`;
+  }
+
+  console.log(`Hold request: fee=$${fee} + deposit=$${deposit} = $${totalUsd} (${totalHbar} HBAR)`);
+
+  try {
+    const entry = await openHold({
+      flightId: flight.id,
+      flightNo: flight.flightNo,
+      airline: flight.airline,
+      route: `${flight.fromCode} → ${flight.toCode}`,
+      passengers: Number(passengers) || 1,
+      priceLocked: flight.price,
+      fee,
+      deposit,
+      hours: window,
+      feeTx,
+    });
+
+    console.log(`Hold ${entry.id} opened · ${flight.flightNo} · deposit $${deposit} escrowed · chain: ${entry.chain}`);
+
+    res.json({
+      holdId: entry.id,
+      expiresAt: new Date(entry.expiresAt).toISOString(),
+      fee: entry.fee,
+      deposit: entry.deposit,
+      // Payment info: buyer pays fee + deposit via x402, seller forwards deposit to escrow
+      payment: {
+        totalUsd: totalUsd,
+        totalHbar: totalHbar,
+        totalTinybars: totalTinybars,
+        feeUsd: fee,
+        depositUsd: deposit,
+      },
+      escrow: escrowContract().address ?? "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170",
+      feeTx: entry.feeTx,
+      depositTx: entry.depositTx,
+      chain: entry.chain,
+      ...(entry.contractError ? { contractError: entry.contractError } : {}),
+    });
+  } catch (e) {
+    console.error("Failed to open hold:", e);
+    res.status(500).json({ error: "Failed to create hold" });
+  }
+});
+
+// GET /holds/:id - Check hold status (for polling)
+app.get("/holds/:id", (req, res) => {
+  const entry = getHoldById(req.params.id);
+  if (!entry) {
+    res.status(404).json({ error: "Hold not found" });
+    return;
+  }
   res.json({
-    holdId: entry.id,
+    id: entry.id,
+    status: entry.status,
+    depositTx: entry.depositTx,
+    refundTx: entry.refundTx,
+    settleTx: entry.settleTx,
+    chain: entry.chain,
     expiresAt: new Date(entry.expiresAt).toISOString(),
     fee: entry.fee,
     deposit: entry.deposit,
-    escrow: escrowContract().address ?? "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170",
-    feeTx: entry.feeTx,
-    depositTx: entry.depositTx,
-    chain: entry.chain,
   });
 });
 
-app.post("/holds/:id/release", (req, res) => {
-  const entry = closeHold(req.params.id, "released");
-  if (!entry) {
-    res.status(404).json({ error: "No open hold with that id" });
-    return;
+app.post("/holds/:id/release", async (req, res) => {
+  try {
+    const entry = await closeHold(req.params.id, "released");
+    if (!entry) {
+      res.status(404).json({ error: "No open hold with that id" });
+      return;
+    }
+    res.json({ refundTx: entry.refundTx, deposit: entry.deposit, status: entry.status });
+  } catch (e) {
+    console.error("Failed to release hold:", e);
+    res.status(500).json({ error: "Failed to release hold" });
   }
-  res.json({ refundTx: entry.refundTx, deposit: entry.deposit, status: entry.status });
 });
 
-app.post("/holds/:id/settle", (req, res) => {
-  const entry = closeHold(req.params.id, "settled");
-  if (!entry) {
-    res.status(404).json({ error: "No open hold with that id" });
-    return;
+app.post("/holds/:id/settle", async (req, res) => {
+  try {
+    const entry = await closeHold(req.params.id, "settled");
+    if (!entry) {
+      res.status(404).json({ error: "No open hold with that id" });
+      return;
+    }
+    res.json({ settleTx: entry.settleTx, deposit: entry.deposit, status: entry.status });
+  } catch (e) {
+    console.error("Failed to settle hold:", e);
+    res.status(500).json({ error: "Failed to settle hold" });
   }
-  res.json({ settleTx: entry.settleTx, deposit: entry.deposit, status: entry.status });
 });
 
 // GET /escrow - vault snapshot for the TVL dashboard
 app.get("/escrow", (req, res) => {
   res.json(snapshot(Number(req.query["limit"] ?? 12) || 12));
+});
+
+// POST /notify/match - Send email notification when AI Monitor finds a matching flight
+app.post("/notify/match", async (req, res) => {
+  const { flight, trip, hold } = req.body ?? {};
+
+  if (!flight || !trip) {
+    res.status(400).json({ error: "Missing flight or trip data" });
+    return;
+  }
+
+  if (!trip.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trip.email)) {
+    res.status(400).json({ error: "Invalid email address" });
+    return;
+  }
+
+  console.log(`[notify] Sending match notification to ${trip.email} for ${flight.airline} ${flight.flightNo}`);
+
+  const result = await sendFlightMatchEmail(
+    flight as FlightMatchData,
+    trip as TripData,
+    (hold as HoldData) ?? null
+  );
+
+  if (!result.success) {
+    console.error(`[notify] Email failed: ${result.error}`);
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  res.json({ success: true, messageId: result.messageId });
 });
 
 // PAID endpoint
@@ -293,6 +412,7 @@ app.listen(PORT, () => {
   );
   console.log(`  POST /holds          - Free: open a seat hold (deposit → escrow)`);
   console.log(`  GET  /escrow         - Free: escrow vault snapshot`);
+  console.log(`  POST /notify/match   - Free: send email when match found`);
   console.log(`  POST /booking        - Paid: $0.10 USDC on Base Sepolia`);
   const c = escrowContract();
   console.log(

@@ -95,35 +95,122 @@ export type HoldRequest = {
   email: string;
 };
 
+export type HoldPaymentInfo = {
+  totalUsd: number;
+  totalHbar: number;
+  totalTinybars: string;
+  feeUsd: number;
+  depositUsd: number;
+};
+
 export type HoldResponse = {
   holdId: string;
   expiresAt: string;
   fee: number;
   deposit: number;
+  /** Payment breakdown: buyer pays fee + deposit via x402 */
+  payment: HoldPaymentInfo;
   escrow: string;
   feeTx: string;
   depositTx: string;
+  chain: string;
+  /** Error message if contract call failed (hold still works in simulated mode) */
+  contractError?: string;
 };
 
-function payingFetch(): typeof fetch {
+export type HoldRequestResult =
+  | { ok: true; data: HoldResponse }
+  | { ok: false; error: string; status?: number };
+
+function payingFetch(): { fetch: typeof fetch; usingX402: boolean } {
+  console.log("[api] payingFetch() called");
   try {
-    return getX402Fetch();
-  } catch {
-    return fetch; // no wallet configured — /holds is free, keep the demo running
+    const x402Fetch = getX402Fetch();
+    console.log("[api] Got x402 fetch wrapper successfully");
+    return { fetch: x402Fetch, usingX402: true };
+  } catch (e) {
+    console.error("[api] x402 not available, using regular fetch:", e instanceof Error ? e.message : e);
+    if (e instanceof Error && e.stack) {
+      console.error("[api] Stack:", e.stack);
+    }
+    return { fetch, usingX402: false };
   }
 }
 
-export async function requestHoldOnChain(req: HoldRequest): Promise<HoldResponse | null> {
+export async function requestHoldOnChain(req: HoldRequest): Promise<HoldRequestResult> {
+  console.log("[hold] Requesting hold:", req);
+
+  const { fetch: fetchFn, usingX402 } = payingFetch();
+  console.log("[hold] Using x402:", usingX402);
+
+  if (!usingX402) {
+    console.warn("[hold] x402 not available — payment will fail");
+  }
+
   try {
-    const res = await payingFetch()(`${API_URL}/holds`, {
+    const res = await fetchFn(`${API_URL}/holds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
     });
+
+    console.log("[hold] Response status:", res.status);
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      console.error("[hold] Request failed:", res.status, res.statusText);
+      console.error("[hold] Response body:", errorBody);
+
+      if (res.status === 402) {
+        console.error("[hold] 402 Payment Required — x402 payment failed or wallet not configured");
+        console.error("[hold] Check that VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are set in frontend/.env");
+        console.error("[hold] Response headers:", Object.fromEntries(res.headers.entries()));
+        return {
+          ok: false,
+          error: "Payment required. Check that your Hedera wallet is configured in frontend/.env",
+          status: 402,
+        };
+      }
+      return {
+        ok: false,
+        error: errorBody || res.statusText,
+        status: res.status,
+      };
+    }
+
+    const data = (await res.json()) as HoldResponse;
+    console.log("[hold] Hold created successfully:", data.holdId);
+    console.log("[hold] Payment:", data.payment);
+    return { ok: true, data };
+  } catch (e) {
+    console.error("[hold] Exception during hold request:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    if (e instanceof Error) {
+      console.error("[hold] Error stack:", e.stack);
+    }
+    return { ok: false, error: msg };
+  }
+}
+
+export type HoldStatusResponse = {
+  id: string;
+  status: "held" | "released" | "expired" | "settled";
+  depositTx: string;
+  refundTx?: string;
+  settleTx?: string;
+  chain: string;
+};
+
+/**
+ * Poll the hold status from the backend.
+ * Returns null if the hold doesn't exist or an error occurs.
+ */
+export async function getHoldStatus(holdId: string): Promise<HoldStatusResponse | null> {
+  try {
+    const res = await fetch(`${API_URL}/holds/${holdId}`);
     if (!res.ok) return null;
-    return (await res.json()) as HoldResponse;
+    return (await res.json()) as HoldStatusResponse;
   } catch {
-    // no wallet configured, or the seller has no /holds endpoint yet
     return null;
   }
 }
@@ -229,4 +316,73 @@ export async function fetchCatalog(q: CatalogQuery): Promise<CatalogResponse> {
   const res = await fetch(`${API_URL}/flights/catalog?${params}`);
   if (!res.ok) throw new Error(`Failed to load flights: ${res.statusText}`);
   return (await res.json()) as CatalogResponse;
+}
+
+/* ---------------------------------------------------------------------------
+ * Email notifications — when the AI Monitor finds a matching flight.
+ * ------------------------------------------------------------------------- */
+
+export type NotifyMatchRequest = {
+  flight: {
+    id: string;
+    airline: string;
+    flightNo: string;
+    fromCode: string;
+    toCode: string;
+    departTime: string;
+    arriveTime: string;
+    duration: string;
+    price: number;
+    stops: number;
+  };
+  trip: {
+    from: string;
+    fromCode: string;
+    to: string;
+    toCode: string;
+    depart: string;
+    ret: string;
+    budget: number;
+    passengers: number;
+    cabin: string;
+    email: string;
+  };
+  hold?: {
+    holdId?: string;
+    fee?: number;
+    deposit?: number;
+    expiresAt?: string;
+  };
+};
+
+export type NotifyMatchResponse = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+};
+
+/**
+ * Send a flight match notification email.
+ * Called when the AI Monitor finds a flight matching the user's criteria.
+ */
+export async function notifyMatch(req: NotifyMatchRequest): Promise<NotifyMatchResponse> {
+  try {
+    const res = await fetch(`${API_URL}/notify/match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      console.error("[notify] Request failed:", res.status, errorBody);
+      return { success: false, error: errorBody || res.statusText };
+    }
+
+    return (await res.json()) as NotifyMatchResponse;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[notify] Exception:", msg);
+    return { success: false, error: msg };
+  }
 }

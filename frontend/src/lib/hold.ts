@@ -15,6 +15,13 @@ export type HoldStatus = "held" | "released" | "expired" | "booked";
 /** "onchain" once the seller exposes POST /holds; "simulated" until then. */
 export type HoldMode = "onchain" | "simulated";
 
+export type HoldPayment = {
+  totalUsd: number;
+  totalHbar: number;
+  feeUsd: number;
+  depositUsd: number;
+};
+
 export type Hold = {
   id: string;
   flightId: string;
@@ -24,6 +31,8 @@ export type Hold = {
   priceLocked: number;
   fee: number;
   deposit: number;
+  /** Payment info: total paid via x402 (fee + deposit) */
+  payment?: HoldPayment;
   escrow: string;
   feeTx: string;
   depositTx: string;
@@ -32,6 +41,10 @@ export type Hold = {
   expiresAt: number;
   status: HoldStatus;
   mode: HoldMode;
+  /** Error message if contract call failed (hold still works in simulated mode) */
+  contractError?: string;
+  /** Error message if the hold request failed (e.g., 402 payment required) */
+  requestError?: string;
 };
 
 export const holdWindows = [6, 24] as const;
@@ -39,13 +52,14 @@ export const holdWindows = [6, 24] as const;
 export const ESCROW_ADDRESS = "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170";
 
 /**
- * fee    = 0.5% of the fare, pro-rated by how long the seat is off the market
- *          (never below $1 — a hold always costs the seller something).
- * deposit = 10% of the fare, capped so the agent never locks up too much.
+ * For testing: use small fixed amounts that fit within 20 HBAR (~$1 at $0.05/HBAR)
+ * Fee: $0.20 (non-refundable)
+ * Deposit: $0.80 (refundable)
+ * Total: $1.00 = 20 HBAR
  */
-export function holdQuote(fareTotal: number, hours: number) {
-  const fee = Math.max(1, Math.round(fareTotal * 0.005 * (hours / 24) * 100) / 100);
-  const deposit = Math.min(60, Math.max(10, Math.round(fareTotal * 0.1)));
+export function holdQuote(_fareTotal: number, _hours: number) {
+  const fee = 0.20;
+  const deposit = 0.80;
   return { fee, deposit };
 }
 
@@ -85,13 +99,36 @@ export async function placeHold(input: {
   const quote = holdQuote(priceLocked * trip.passengers, hours);
   const now = Date.now();
 
-  const onChain = await requestHoldOnChain({
+  console.log("[placeHold] Starting hold placement...");
+  console.log("[placeHold] Flight:", flightId, "Fare:", fareIndex, "Passengers:", trip.passengers);
+  console.log("[placeHold] Quote:", quote, "Price locked:", priceLocked, "Hours:", hours);
+
+  const result = await requestHoldOnChain({
     flightId,
     fareIndex,
     passengers: trip.passengers,
     hours,
     email: trip.email,
   });
+
+  const onChain = result.ok ? result.data : null;
+  const requestError = result.ok ? undefined : result.error;
+
+  if (result.ok) {
+    console.log("[placeHold] On-chain response received");
+    console.log("[placeHold] Chain:", result.data.chain);
+    console.log("[placeHold] Hold ID:", result.data.holdId);
+    console.log("[placeHold] Payment info:", result.data.payment);
+    if (result.data.contractError) {
+      console.warn("[placeHold] Contract error:", result.data.contractError);
+    }
+  } else {
+    console.error("[placeHold] Request failed:", result.error);
+    console.log("[placeHold] Falling back to simulated mode");
+  }
+
+  // Determine mode: "onchain" if we got a response and chain is not "simulated"
+  const isOnChain = onChain && onChain.chain !== "simulated";
 
   const hold: Hold = {
     id: onChain?.holdId ?? `h_${hex(6)}`,
@@ -101,13 +138,26 @@ export async function placeHold(input: {
     priceLocked,
     fee: onChain?.fee ?? quote.fee,
     deposit: onChain?.deposit ?? quote.deposit,
+    // Payment info from x402 (fee + deposit paid together)
+    ...(onChain?.payment
+      ? {
+          payment: {
+            totalUsd: onChain.payment.totalUsd,
+            totalHbar: onChain.payment.totalHbar,
+            feeUsd: onChain.payment.feeUsd,
+            depositUsd: onChain.payment.depositUsd,
+          },
+        }
+      : {}),
     escrow: onChain?.escrow ?? ESCROW_ADDRESS,
     feeTx: onChain?.feeTx ?? localTx(),
     depositTx: onChain?.depositTx ?? localTx(),
     createdAt: now,
     expiresAt: onChain ? Date.parse(onChain.expiresAt) : now + hours * 3_600_000,
     status: "held",
-    mode: onChain ? "onchain" : "simulated",
+    mode: isOnChain ? "onchain" : "simulated",
+    ...(onChain?.contractError ? { contractError: onChain.contractError } : {}),
+    ...(requestError ? { requestError } : {}),
   };
 
   saveHold(hold);

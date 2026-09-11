@@ -478,3 +478,44 @@ export function nightsBetween(depart: string, ret: string) {
   const n = Math.round((b - a) / 86_400_000);
   return n > 0 ? n : null;
 }
+
+/* ---------------------------------------------------------------------------
+ * URL encoding/decoding helpers for deep linking.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Encode trip data for URL query parameter.
+ * Uses base64url encoding to make it URL-safe.
+ */
+export function encodeTripForUrl(trip: Trip): string {
+  try {
+    const json = JSON.stringify(trip);
+    // Use base64url encoding (replace + with -, / with _, remove padding)
+    const base64 = btoa(json);
+    return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Decode trip data from URL query parameter.
+ * Returns null if decoding fails.
+ */
+export function decodeTripFromUrl(encoded: string): Trip | null {
+  if (!encoded) return null;
+  try {
+    // Restore base64 padding and characters
+    let base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    // Add padding if needed
+    while (base64.length % 4) {
+      base64 += "=";
+    }
+    const json = atob(base64);
+    const parsed = JSON.parse(json) as Partial<Trip>;
+    // Merge with defaults to ensure all fields are present
+    return { ...defaultTrip, ...parsed };
+  } catch {
+    return null;
+  }
+}

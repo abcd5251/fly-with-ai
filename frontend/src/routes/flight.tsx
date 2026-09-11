@@ -1,4 +1,5 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { z } from "zod";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -42,11 +43,14 @@ import {
   placeHold,
   policyCheck,
   releaseHold,
+  saveHold,
   shortTx,
   type Hold,
 } from "@/lib/hold";
+import { getHoldStatus } from "@/lib/api";
 import {
   agentRun,
+  decodeTripFromUrl,
   defaultTrip,
   fmtDate,
   flightById,
@@ -58,13 +62,22 @@ import {
   money,
   returnLegFor,
   saveSelection,
+  saveTrip,
   type Amenity,
   type Fare,
   type Flight,
   type Trip,
 } from "@/lib/trip";
 
+// Search params schema for deep linking from email
+const flightSearchSchema = z.object({
+  flightId: z.string().optional(),
+  fareIndex: z.coerce.number().optional(),
+  tripData: z.string().optional(), // Base64url-encoded Trip
+});
+
 export const Route = createFileRoute("/flight")({
+  validateSearch: flightSearchSchema,
   head: () => ({
     meta: [
       { title: "Match Found — Flight Details & Fare Options | TravelPay AI" },
@@ -452,6 +465,7 @@ function FareCard({
 
 function MatchPage() {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/flight" });
   const [trip, setTrip] = useState<Trip>(defaultTrip);
   const [flightId, setFlightId] = useState(matchedFlight.id);
   const [fareIndex, setFareIndex] = useState(1);
@@ -460,17 +474,41 @@ function MatchPage() {
   const [confirmRelease, setConfirmRelease] = useState(false);
 
   const pinned = useRef(false);
+  const hydratedFromUrl = useRef(false);
 
+  // Hydrate state from URL params (deep link from email) or session storage
   useEffect(() => {
-    setTrip(loadTrip());
-    const sel = storedSelection();
-    if (sel) {
-      setFlightId(sel.flightId);
-      setFareIndex(sel.fareIndex);
-      pinned.current = true;
+    if (hydratedFromUrl.current) return;
+    hydratedFromUrl.current = true;
+
+    // Check for deep link params from email
+    if (search.tripData) {
+      const decodedTrip = decodeTripFromUrl(search.tripData);
+      if (decodedTrip) {
+        setTrip(decodedTrip);
+        saveTrip(decodedTrip); // Persist to session for subsequent navigation
+      }
+    } else {
+      setTrip(loadTrip());
     }
+
+    // Set flight selection from URL or session storage
+    if (search.flightId) {
+      setFlightId(search.flightId);
+      setFareIndex(search.fareIndex ?? 1);
+      pinned.current = true;
+      saveSelection({ flightId: search.flightId, fareIndex: search.fareIndex ?? 1 });
+    } else {
+      const sel = storedSelection();
+      if (sel) {
+        setFlightId(sel.flightId);
+        setFareIndex(sel.fareIndex);
+        pinned.current = true;
+      }
+    }
+
     setHold(loadHold());
-  }, []);
+  }, [search.tripData, search.flightId, search.fareIndex]);
 
   const catalog = useCatalog(trip);
   const f = pickFlight(catalog, flightId);
@@ -515,6 +553,44 @@ function MatchPage() {
       setHold(expireHold(hold));
     }
   }, [hold, holdLeft]);
+
+  // poll hold status every 5s to get real tx hashes from the backend
+  useEffect(() => {
+    if (!hold || hold.status !== "held" || hold.mode !== "onchain") return;
+
+    const poll = async () => {
+      const status = await getHoldStatus(hold.id);
+      if (!status) return;
+
+      // update tx hashes if they've been confirmed
+      const newMode: Hold["mode"] = status.chain === "simulated" ? "simulated" : "onchain";
+      if (status.depositTx !== hold.depositTx || newMode !== hold.mode) {
+        const updated: Hold = {
+          ...hold,
+          depositTx: status.depositTx,
+          mode: newMode,
+        };
+        setHold(updated);
+        saveHold(updated);
+      }
+
+      // if hold was settled/released/expired on backend, update local state
+      if (status.status !== "held") {
+        const newStatus = status.status === "settled" ? "booked" : status.status;
+        const updated: Hold = {
+          ...hold,
+          status: newStatus,
+          ...(status.refundTx ? { refundTx: status.refundTx } : {}),
+        };
+        setHold(updated);
+        saveHold(updated);
+      }
+    };
+
+    const interval = setInterval(poll, 5000);
+    poll(); // initial poll
+    return () => clearInterval(interval);
+  }, [hold?.id, hold?.status, hold?.mode]);
 
   const takeHold = async (targetId: string) => {
     setHoldBusy(true);
@@ -688,13 +764,36 @@ function MatchPage() {
                 escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
                 {hold!.mode === "simulated" && " · local"}
               </p>
+              {hold!.requestError && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded bg-red-500/15 px-2 py-1 font-mono text-[10px] text-red-400">
+                  <TriangleAlert className="size-3" />
+                  Request failed: {hold!.requestError}
+                </p>
+              )}
+              {hold!.contractError && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded bg-amber/15 px-2 py-1 font-mono text-[10px] text-amber">
+                  <TriangleAlert className="size-3" />
+                  Contract call failed: {hold!.contractError}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-2 gap-2.5 sm:w-[300px]">
+              <div className="grid grid-cols-3 gap-2.5 sm:w-[420px]">
                 <div className="chip rounded-xl p-3">
                   <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
-                    Hold fee · paid
+                    x402 payment
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
+                    {hold!.payment ? `${hold!.payment.totalHbar} HBAR` : money(hold!.fee + hold!.deposit)}
+                  </span>
+                  <span className="font-mono text-[9.5px] text-steel">
+                    {money(hold!.fee + hold!.deposit)} total
+                  </span>
+                </div>
+                <div className="chip rounded-xl p-3">
+                  <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
+                    Hold fee
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-ink">
                     {money(hold!.fee)}
@@ -703,12 +802,12 @@ function MatchPage() {
                 </div>
                 <div className="chip rounded-xl p-3">
                   <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-steel">
-                    Deposit · escrowed
+                    Deposit
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
                     {money(hold!.deposit)}
                   </span>
-                  <span className="font-mono text-[9.5px] text-steel">credited at booking</span>
+                  <span className="font-mono text-[9.5px] text-steel">→ escrow</span>
                 </div>
               </div>
 
@@ -777,7 +876,7 @@ function MatchPage() {
                 disabled={holdBusy || !gate.ok}
                 className="chrome bevel rounded-lg px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-void disabled:opacity-60"
               >
-                {holdBusy ? "moving…" : `Move hold here · ${money(quote.fee)}`}
+                {holdBusy ? "moving…" : `Move hold here · ${money(quote.fee + quote.deposit)}`}
               </button>
             </div>
           </div>
@@ -808,7 +907,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat again · ${money(quote.fee)}`}
+              {holdBusy ? "holding…" : `Hold this seat again · ${money(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
@@ -821,8 +920,8 @@ function MatchPage() {
             </p>
             <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-ink">
               {f.seatsLeft} seats left at this fare — anyone can take them while you decide. Hold it
-              for {trip.holdHours}h: {money(quote.fee)} fee, plus {money(quote.deposit)} escrowed as
-              a deposit that comes off your ticket price.
+              for {trip.holdHours}h: pay {money(quote.fee + quote.deposit)} via x402 ({money(quote.fee)} fee
+              + {money(quote.deposit)} deposit). The deposit is escrowed and credited at booking.
             </p>
             {!gate.ok && (
               <p className="mt-1.5 font-mono text-[11px] text-amber">
@@ -837,7 +936,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat · ${money(quote.fee)}`}
+              {holdBusy ? "holding…" : `Hold this seat · ${money(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
