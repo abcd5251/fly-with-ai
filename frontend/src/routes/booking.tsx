@@ -6,6 +6,7 @@ import { pickFlight, useCatalog } from "@/hooks/use-catalog";
 import {
   defaultTrip,
   fmtDate,
+  hbar,
   loadSelection,
   loadTrip,
   matchedFlight,
@@ -15,12 +16,12 @@ import {
 } from "@/lib/trip";
 import { confirmBooking, type BookingConfirmation } from "@/lib/api";
 import { getWalletAddress } from "@/lib/x402-client";
-import { coversFlight, loadHold, markBooked, type Hold } from "@/lib/hold";
+import { BOOKING_HBAR, coversFlight, loadHold, markBooked, type Hold } from "@/lib/hold";
 
 export const Route = createFileRoute("/booking")({
   head: () => ({
     meta: [
-      { title: "Confirm & Pay — Book Your Flight | TravelPay AI" },
+      { title: "Confirm & Pay — Book Your Flight | fly402" },
       {
         name: "description",
         content:
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/booking")({
       { property: "og:title", content: "Confirm & Pay — Book Your Flight" },
       {
         property: "og:description",
-        content: "Pay 1 HBAR to confirm the booking the agent found for you.",
+        content: "Pay in HBAR over x402 to confirm the booking the agent found for you.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -72,8 +73,10 @@ function Booking() {
 
   const holdApplies =
     !!hold && hold.status === "held" && hold.expiresAt > Date.now() && coversFlight(hold, f.id);
-  const credit = holdApplies ? hold!.deposit : 0;
-  const dueNow = Math.max(0, total - credit);
+  // The ticket price is a list price in USD; what x402 actually moves is a flat
+  // HBAR charge. An escrowed deposit settles to the seller on booking — it is a
+  // separate transfer, not a discount on the x402 charge.
+  const escrowCredit = holdApplies ? hold!.deposit : 0;
 
   const book = async () => {
     setState("processing");
@@ -108,12 +111,12 @@ function Booking() {
           <div className="mt-5 rounded-xl border border-edge bg-panel p-5 font-mono text-[13px]">
             {[
               { k: "Airline", v: `${f.airline} · ${f.stops === 0 ? "direct" : `${f.stops} stop`}` },
-              { k: "Flights", v: `${f.flightNo} / ${back.flightNo}` },
+              { k: "Flights", v: back ? `${f.flightNo} / ${back.flightNo}` : f.flightNo },
               { k: "Route", v: `${f.fromCode} → ${f.toCode}` },
               { k: "Dates", v: `${fmtDate(trip.depart)} – ${fmtDate(trip.ret)}` },
               { k: "Travellers", v: `${trip.passengers} · ${f.cabin}` },
               { k: "Fare", v: `${fare.name}` },
-              { k: "Payment", v: "1 HBAR · Hedera Testnet" },
+              { k: "Payment", v: `${BOOKING_HBAR} HBAR · Hedera Testnet` },
             ].map((s) => (
               <div key={s.k} className="flex justify-between py-1.5">
                 <span className="text-steel">{s.k}</span>
@@ -167,13 +170,13 @@ function Booking() {
             </div>
             {holdApplies && (
               <div className="flex justify-between">
-                <dt className="text-mint">Deposit in escrow · credited</dt>
-                <dd className="text-mint">−{money(hold!.deposit)}</dd>
+                <dt className="text-mint">Deposit in escrow · released to seller</dt>
+                <dd className="text-mint">{hbar(escrowCredit)}</dd>
               </div>
             )}
             <div className="flex items-baseline justify-between border-t border-edge pt-3">
-              <dt className="text-sm font-semibold text-ink">Due now</dt>
-              <dd className="font-mono text-2xl font-bold text-mint">{money(dueNow)}</dd>
+              <dt className="text-sm font-semibold text-ink">Charged now</dt>
+              <dd className="font-mono text-2xl font-bold text-mint">{hbar(BOOKING_HBAR)}</dd>
             </div>
           </dl>
         </div>
@@ -198,14 +201,7 @@ function Booking() {
               onClick={() => setState("ready")}
               className="chrome bevel w-full rounded-xl py-4 font-mono text-sm font-bold uppercase tracking-[0.12em] text-void"
             >
-              {isProcessing ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="size-4 animate-spin" />
-                  {state === "signing" ? "Signing..." : "Processing payment..."}
-                </span>
-              ) : (
-                "Confirm & Pay 1 HBAR"
-              )}
+              Try again
             </button>
           </div>
         ) : (
@@ -220,13 +216,13 @@ function Booking() {
                 Paying…
               </span>
             ) : (
-              `Confirm & pay ${money(dueNow)}`
+              `Confirm & pay ${hbar(BOOKING_HBAR)}`
             )}
           </button>
         )}
 
         <p className="mt-3 text-center font-mono text-[11px] text-steel">
-          x402 · $0.10 USDC on Base Sepolia
+          x402 · {hbar(BOOKING_HBAR)} on Hedera Testnet
           {wallet ? ` · ${wallet.slice(0, 6)}…${wallet.slice(-4)}` : " · wallet not configured"}
         </p>
       </section>

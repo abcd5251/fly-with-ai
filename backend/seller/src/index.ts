@@ -8,7 +8,13 @@ import { flights, flightById, returnLegFor } from "./data/flights.js";
 import type { Flight } from "./data/flights.js";
 import { searchLiveFlights, serpApiKey } from "./lib/serpapi.js";
 import { closeHold, escrowContract, getHoldById, openHold, snapshot } from "./lib/escrow.js";
-import { usdToHbar, hbarToTinybars } from "./lib/hedera-client.js";
+import {
+  BOOKING_HBAR,
+  HOLD_DEPOSIT_HBAR,
+  HOLD_FEE_HBAR,
+  HOLD_TOTAL_HBAR,
+  hbarToTinybars,
+} from "./lib/pricing.js";
 import { sendFlightMatchEmail, type FlightMatchData, type TripData, type HoldData } from "./lib/email.js";
 
 const app = express();
@@ -58,7 +64,7 @@ app.use(
             network: "hedera:testnet",
             price: {
               asset: "0.0.0", // HBAR
-              amount: "100000000", // 1 HBAR in tinybars
+              amount: hbarToTinybars(BOOKING_HBAR),
             },
             payTo: hederaAccountId,
           },
@@ -73,9 +79,7 @@ app.use(
             network: "hedera:testnet",
             price: {
               asset: "0.0.0", // HBAR
-              // Max fee + deposit: ~$1 (~20 HBAR at $0.05 = 2B tinybars)
-              // For testing with limited testnet HBAR
-              amount: "2000000000", // 20 HBAR in tinybars
+              amount: hbarToTinybars(HOLD_TOTAL_HBAR),
             },
             payTo: hederaAccountId,
           },
@@ -212,16 +216,11 @@ app.post("/holds", async (req, res) => {
   const fareTotal = flight.price * (Number(passengers) || 1);
   const window = Math.min(72, Math.max(1, Number(hours) || 24));
 
-  // For testing: use small fixed amounts that fit within 20 HBAR (~$1 at $0.05/HBAR)
-  // Fee: $0.20 (non-refundable)
-  // Deposit: $0.80 (refundable)
-  // Total: $1.00 = 20 HBAR
-  const fee = 0.20;
-  const deposit = 0.80;
+  const fee = HOLD_FEE_HBAR;
+  const deposit = HOLD_DEPOSIT_HBAR;
 
-  // Total payment via x402: fee (to seller) + deposit (forwarded to escrow)
-  const totalUsd = fee + deposit;
-  const totalHbar = usdToHbar(totalUsd);
+  // Total collected via x402: fee (kept by the seller) + deposit (forwarded to escrow)
+  const totalHbar = HOLD_TOTAL_HBAR;
   const totalTinybars = hbarToTinybars(totalHbar);
 
   // Extract the x402 payment transaction ID from headers (if present)
@@ -233,7 +232,7 @@ app.post("/holds", async (req, res) => {
     feeTx = `x402:${Date.now().toString(16)}`;
   }
 
-  console.log(`Hold request: fee=$${fee} + deposit=$${deposit} = $${totalUsd} (${totalHbar} HBAR)`);
+  console.log(`Hold request: fee=${fee} + deposit=${deposit} = ${totalHbar} HBAR`);
 
   try {
     const entry = await openHold({
@@ -249,7 +248,7 @@ app.post("/holds", async (req, res) => {
       feeTx,
     });
 
-    console.log(`Hold ${entry.id} opened · ${flight.flightNo} · deposit $${deposit} escrowed · chain: ${entry.chain}`);
+    console.log(`Hold ${entry.id} opened · ${flight.flightNo} · deposit ${deposit} HBAR escrowed · chain: ${entry.chain}`);
 
     res.json({
       holdId: entry.id,
@@ -258,11 +257,10 @@ app.post("/holds", async (req, res) => {
       deposit: entry.deposit,
       // Payment info: buyer pays fee + deposit via x402, seller forwards deposit to escrow
       payment: {
-        totalUsd: totalUsd,
         totalHbar: totalHbar,
         totalTinybars: totalTinybars,
-        feeUsd: fee,
-        depositUsd: deposit,
+        feeHbar: fee,
+        depositHbar: deposit,
       },
       escrow: escrowContract().address ?? "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170",
       feeTx: entry.feeTx,
@@ -410,10 +408,10 @@ app.listen(PORT, () => {
   console.log(
     `  GET  /flights/catalog - Free: live Google Flights (SerpApi ${serpApiKey() ? "key loaded" : "NO KEY"}) + demo rows`
   );
-  console.log(`  POST /holds          - Free: open a seat hold (deposit → escrow)`);
+  console.log(`  POST /holds          - Paid: ${HOLD_TOTAL_HBAR} HBAR (${HOLD_FEE_HBAR} fee + ${HOLD_DEPOSIT_HBAR} deposit → escrow)`);
   console.log(`  GET  /escrow         - Free: escrow vault snapshot`);
   console.log(`  POST /notify/match   - Free: send email when match found`);
-  console.log(`  POST /booking        - Paid: $0.10 USDC on Base Sepolia`);
+  console.log(`  POST /booking        - Paid: ${BOOKING_HBAR} HBAR`);
   const c = escrowContract();
   console.log(
     `\nEscrow: ${c.deployed ? `${c.address} on ${c.network}` : "not deployed — ledger runs off-chain"}`

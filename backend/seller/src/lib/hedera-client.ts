@@ -282,20 +282,3 @@ export async function getContractStats(): Promise<ContractStats | null> {
   }
 }
 
-/**
- * Convert USD amount to HBAR using a simple fixed rate.
- * In production, this would use an oracle or price feed.
- */
-export function usdToHbar(usd: number): number {
-  // Approximate HBAR price: ~$0.05 USD
-  // So $1 USD = 20 HBAR
-  const hbarPrice = parseFloat(process.env["HBAR_USD_PRICE"] ?? "0.05");
-  return Math.ceil((usd / hbarPrice) * 100) / 100; // Round up to 2 decimals
-}
-
-/**
- * Convert HBAR amount to tinybars (1 HBAR = 100,000,000 tinybars).
- */
-export function hbarToTinybars(hbar: number): string {
-  return String(Math.round(hbar * 100_000_000));
-}

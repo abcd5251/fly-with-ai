@@ -52,17 +52,18 @@ import {
   agentRun,
   decodeTripFromUrl,
   defaultTrip,
-  fmtDate,
   flightById,
   flights,
+  fmtDate,
+  hbar,
   loadSelection,
-  storedSelection,
-  matchedFlight,
   loadTrip,
+  matchedFlight,
   money,
   returnLegFor,
   saveSelection,
   saveTrip,
+  storedSelection,
   type Amenity,
   type Fare,
   type Flight,
@@ -80,7 +81,7 @@ export const Route = createFileRoute("/flight")({
   validateSearch: flightSearchSchema,
   head: () => ({
     meta: [
-      { title: "Match Found — Flight Details & Fare Options | TravelPay AI" },
+      { title: "Match Found — Flight Details & Fare Options | fly402" },
       {
         name: "description",
         content:
@@ -699,7 +700,7 @@ function MatchPage() {
                 <Radio className={`size-3.5 ${catalog.live ? "text-mint" : "text-steel"}`} />
                 {catalog.live
                   ? `${catalog.live} of ${catalog.flights.length} rows live · google flights`
-                  : "demo inventory · seller offline"}
+                  : "cached fares · live feed unavailable"}
               </span>
             </div>
           </div>
@@ -785,10 +786,10 @@ function MatchPage() {
                     x402 payment
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
-                    {hold!.payment ? `${hold!.payment.totalHbar} HBAR` : money(hold!.fee + hold!.deposit)}
+                    {hold!.payment ? `${hold!.payment.totalHbar} HBAR` : hbar(hold!.fee + hold!.deposit)}
                   </span>
                   <span className="font-mono text-[9.5px] text-steel">
-                    {money(hold!.fee + hold!.deposit)} total
+                    {hbar(hold!.fee + hold!.deposit)} total
                   </span>
                 </div>
                 <div className="chip rounded-xl p-3">
@@ -796,7 +797,7 @@ function MatchPage() {
                     Hold fee
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-ink">
-                    {money(hold!.fee)}
+                    {hbar(hold!.fee)}
                   </span>
                   <span className="font-mono text-[9.5px] text-steel">non-refundable</span>
                 </div>
@@ -805,7 +806,7 @@ function MatchPage() {
                     Deposit
                   </span>
                   <span className="mt-0.5 block font-mono text-[13px] font-bold text-mint">
-                    {money(hold!.deposit)}
+                    {hbar(hold!.deposit)}
                   </span>
                   <span className="font-mono text-[9.5px] text-steel">→ escrow</span>
                 </div>
@@ -819,7 +820,7 @@ function MatchPage() {
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-danger/60 bg-danger/10 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-danger disabled:opacity-60"
                   >
                     <LockOpen className="size-3.5" />
-                    {holdBusy ? "releasing…" : `Refund ${money(hold!.deposit)}`}
+                    {holdBusy ? "releasing…" : `Refund ${hbar(hold!.deposit)}`}
                   </button>
                   <button
                     onClick={() => setConfirmRelease(false)}
@@ -841,7 +842,7 @@ function MatchPage() {
           </div>
           {confirmRelease && (
             <p className="mt-3 font-mono text-[11px] text-steel">
-              Releasing returns {money(hold!.deposit)} from escrow. The {money(hold!.fee)} hold fee
+              Releasing returns {hbar(hold!.deposit)} from escrow. The {hbar(hold!.fee)} hold fee
               is not refunded, and the seat goes back on sale immediately.
             </p>
           )}
@@ -857,7 +858,7 @@ function MatchPage() {
               <p className="mt-2 text-[15px] text-ink">
                 {holdFlight.airline} {holdFlight.flightNo} is held for{" "}
                 <span className="font-mono text-amber">{fmtCountdown(holdLeft)}</span>. Booking{" "}
-                {f.airline} {f.flightNo} instead means letting that hold go — the {money(hold!.fee)}{" "}
+                {f.airline} {f.flightNo} instead means letting that hold go — the {hbar(hold!.fee)}{" "}
                 fee is not refunded.
               </p>
             </div>
@@ -876,7 +877,7 @@ function MatchPage() {
                 disabled={holdBusy || !gate.ok}
                 className="chrome bevel rounded-lg px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-void disabled:opacity-60"
               >
-                {holdBusy ? "moving…" : `Move hold here · ${money(quote.fee + quote.deposit)}`}
+                {holdBusy ? "moving…" : `Move hold here · ${hbar(quote.fee + quote.deposit)}`}
               </button>
             </div>
           </div>
@@ -889,9 +890,9 @@ function MatchPage() {
               hold {hold.status}
             </p>
             <p className="mt-2 text-[15px] text-ink">
-              {money(hold.deposit)} deposit refunded from escrow.{" "}
+              {hbar(hold.deposit)} deposit refunded from escrow.{" "}
               <span className="text-steel">
-                The {money(hold.fee)} fee covered the time the seat was off the market.
+                The {hbar(hold.fee)} fee covered the time the seat was off the market.
               </span>
             </p>
             {hold.refundTx && (
@@ -907,7 +908,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat again · ${money(quote.fee + quote.deposit)}`}
+              {holdBusy ? "holding…" : `Hold this seat again · ${hbar(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
@@ -920,8 +921,8 @@ function MatchPage() {
             </p>
             <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-ink">
               {f.seatsLeft} seats left at this fare — anyone can take them while you decide. Hold it
-              for {trip.holdHours}h: pay {money(quote.fee + quote.deposit)} via x402 ({money(quote.fee)} fee
-              + {money(quote.deposit)} deposit). The deposit is escrowed and credited at booking.
+              for {trip.holdHours}h: pay {hbar(quote.fee + quote.deposit)} via x402 ({hbar(quote.fee)} fee
+              + {hbar(quote.deposit)} deposit). The deposit is escrowed and credited at booking.
             </p>
             {!gate.ok && (
               <p className="mt-1.5 font-mono text-[11px] text-amber">
@@ -936,7 +937,7 @@ function MatchPage() {
           >
             <span className="inline-flex items-center gap-2">
               <Lock className="size-3.5" />
-              {holdBusy ? "holding…" : `Hold this seat · ${money(quote.fee + quote.deposit)}`}
+              {holdBusy ? "holding…" : `Hold this seat · ${hbar(quote.fee + quote.deposit)}`}
             </span>
           </button>
         </section>
@@ -1145,11 +1146,11 @@ function MatchPage() {
               <>
                 <div className="flex justify-between">
                   <dt className="text-steel">Hold fee · non-refundable</dt>
-                  <dd className="text-steel">{money(hold!.fee)} paid</dd>
+                  <dd className="text-steel">{hbar(hold!.fee)} paid</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-mint">Deposit in escrow · credited</dt>
-                  <dd className="text-mint">−{money(hold!.deposit)}</dd>
+                  <dd className="text-mint">−{hbar(hold!.deposit)}</dd>
                 </div>
               </>
             )}
@@ -1177,7 +1178,7 @@ function MatchPage() {
             </p>
             {holdApplies ? (
               <p className="mt-1 font-mono text-[11px] text-steel">
-                {money(total)} total · {money(hold!.deposit)} already in escrow
+                {money(total)} total · {hbar(hold!.deposit)} already in escrow
               </p>
             ) : (
               <p className="mt-1 font-mono text-[11px] text-steel">

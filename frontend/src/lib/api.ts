@@ -96,11 +96,10 @@ export type HoldRequest = {
 };
 
 export type HoldPaymentInfo = {
-  totalUsd: number;
   totalHbar: number;
   totalTinybars: string;
-  feeUsd: number;
-  depositUsd: number;
+  feeHbar: number;
+  depositHbar: number;
 };
 
 export type HoldResponse = {

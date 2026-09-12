@@ -7,7 +7,7 @@ import { agentRun, defaultTrip, loadTrip, matchedFlight, money, type Trip } from
 export const Route = createFileRoute("/activity")({
   head: () => ({
     meta: [
-      { title: "Agent Log — x402 Payment Trail | TravelPay AI" },
+      { title: "Agent Log — x402 Payment Trail | fly402" },
       {
         name: "description",
         content:

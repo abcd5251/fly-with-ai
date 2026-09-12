@@ -31,6 +31,7 @@ import {
   agentRun,
   codeFor,
   defaultTrip,
+  hbar,
   loadTrip,
   matchedFlight,
   money,
@@ -44,13 +45,13 @@ import { notifyMatch } from "@/lib/api";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Set Your Trip — Autonomous Flight Agent on Hedera x402 | TravelPay AI" },
+      { title: "Set Your Trip — Autonomous Flight Agent on Hedera x402 | fly402" },
       {
         name: "description",
         content:
           "Step 1 of 2 — tell the agent your route, dates and budget. It pays for flight data with Hedera x402 and emails you the moment it finds a match.",
       },
-      { property: "og:title", content: "Set Your Trip — TravelPay AI" },
+      { property: "og:title", content: "Set Your Trip — fly402" },
       {
         property: "og:description",
         content:
@@ -97,8 +98,8 @@ function RequestPage() {
       ? gate.ok
         ? [
             "POST /holds · HTTP 402 · payment required",
-            `hold fee ${money(quote.fee)} paid · non-refundable`,
-            `deposit ${money(quote.deposit)} escrowed · refundable`,
+            `hold fee ${hbar(quote.fee)} paid · non-refundable`,
+            `deposit ${hbar(quote.deposit)} escrowed · refundable`,
             `seat held · price locked for ${trip.holdHours}h`,
           ]
         : [`hold skipped · ${gate.reason}`]
@@ -267,10 +268,10 @@ function RequestPage() {
                     { k: "Route", v: `${trip.fromCode} → ${trip.toCode}` },
                     { k: "Dates", v: `${nights ?? "—"} nights` },
                     holdLive
-                      ? { k: "Hold fee · paid", v: money(hold!.fee) }
+                      ? { k: "Hold fee · paid", v: hbar(hold!.fee) }
                       : { k: "Budget", v: `${money(trip.budget)}` },
                     holdLive
-                      ? { k: "Deposit · escrowed", v: money(hold!.deposit) }
+                      ? { k: "Deposit · escrowed", v: hbar(hold!.deposit) }
                       : { k: "Data paid", v: step >= 4 ? `${agentRun.paid} HBAR` : "—" },
                   ].map((s) => (
                     <div key={s.k} className="chip rounded-xl p-3">
@@ -336,7 +337,7 @@ function RequestPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-mono text-[12px] text-ink">
-                          agent@blocky402.ai
+                          agent@fly402.ai
                         </p>
                         <p className="truncate font-mono text-[11px] text-steel">to {trip.email}</p>
                       </div>
@@ -353,8 +354,8 @@ function RequestPage() {
                       {trip.from} → {trip.to} · direct · {match.duration}.{" "}
                       {holdLive ? (
                         <>
-                          I paid {money(hold!.fee)} to take this seat off the market and escrowed{" "}
-                          {money(hold!.deposit)} as a refundable deposit — your price is locked
+                          I paid {hbar(hold!.fee)} to take this seat off the market and escrowed{" "}
+                          {hbar(hold!.deposit)} as a refundable deposit — your price is locked
                           until the timer runs out. Open it to book, or release the hold and the
                           deposit comes straight back.
                         </>
@@ -372,7 +373,7 @@ function RequestPage() {
                               ? ` · ${new Date(catalog.fetchedAt).toLocaleString()}`
                               : ""
                           }`
-                        : "demo inventory · seller offline"}
+                        : "cached fares · live feed unavailable"}
                     </p>
                     {holdLive && (
                       <p className="mt-1 font-mono text-[10.5px] text-steel">
@@ -642,19 +643,19 @@ function RequestPage() {
                         <span className="block font-mono text-[9.5px] uppercase tracking-[0.15em] text-steel">
                           Max hold fee
                         </span>
-                        <span className="mt-1 flex items-baseline font-mono text-lg font-bold text-ink">
-                          $
+                        <span className="mt-1 flex items-baseline gap-1 font-mono text-lg font-bold text-ink">
                           <input
                             type="number"
                             min={0}
-                            max={20}
-                            step={0.5}
+                            max={5}
+                            step={0.1}
                             value={trip.maxHoldFee}
                             onChange={(e) =>
-                              set("maxHoldFee", Math.min(20, Math.max(0, Number(e.target.value))))
+                              set("maxHoldFee", Math.min(5, Math.max(0, Number(e.target.value))))
                             }
                             className="nospin w-full bg-transparent font-mono text-lg font-bold text-ink outline-none"
                           />
+                          <span className="text-[11px] text-steel">HBAR</span>
                         </span>
                         <span className="font-mono text-[10px] text-steel">non-refundable</span>
                       </label>
@@ -663,19 +664,19 @@ function RequestPage() {
                         <span className="block font-mono text-[9.5px] uppercase tracking-[0.15em] text-steel">
                           Max deposit
                         </span>
-                        <span className="mt-1 flex items-baseline font-mono text-lg font-bold text-ink">
-                          $
+                        <span className="mt-1 flex items-baseline gap-1 font-mono text-lg font-bold text-ink">
                           <input
                             type="number"
                             min={0}
-                            max={500}
-                            step={5}
+                            max={20}
+                            step={0.1}
                             value={trip.maxDeposit}
                             onChange={(e) =>
-                              set("maxDeposit", Math.min(500, Math.max(0, Number(e.target.value))))
+                              set("maxDeposit", Math.min(20, Math.max(0, Number(e.target.value))))
                             }
                             className="nospin w-full bg-transparent font-mono text-lg font-bold text-ink outline-none"
                           />
+                          <span className="text-[11px] text-steel">HBAR</span>
                         </span>
                         <span className="font-mono text-[10px] text-steel">
                           escrowed, refundable
@@ -707,8 +708,8 @@ function RequestPage() {
 
                     <p className="font-mono text-[11px] leading-relaxed text-steel">
                       For this trip the agent would pay{" "}
-                      <span className="text-mint">{money(quote.fee)}</span> to hold the seat and
-                      escrow <span className="text-mint">{money(quote.deposit)}</span> — the deposit
+                      <span className="text-mint">{hbar(quote.fee)}</span> to hold the seat and
+                      escrow <span className="text-mint">{hbar(quote.deposit)}</span> — the deposit
                       is credited to your ticket, or refunded in full if you let the hold go. Above
                       these caps the agent asks you first.
                     </p>

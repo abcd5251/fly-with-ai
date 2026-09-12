@@ -32,8 +32,8 @@ export const defaultTrip: Trip = {
   directOnly: true,
   email: "you@example.com",
   autoHold: true,
-  maxHoldFee: 3,
-  maxDeposit: 60,
+  maxHoldFee: 1,
+  maxDeposit: 5,
   holdHours: 24,
 };
 
@@ -450,6 +450,11 @@ export function loadSelection(): Selection {
 
 export function flightById(id: string): Flight {
   return flights.find((f) => f.id === id) ?? flights[0]!;
+}
+
+/** 0.4 → "0.4 HBAR" — what the buyer is actually charged on Hedera. */
+export function hbar(n: number) {
+  return `${Math.round(n * 1e4) / 1e4} HBAR`;
 }
 
 /** 1144 → "$1,144" */

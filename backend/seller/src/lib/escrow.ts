@@ -8,7 +8,6 @@ import {
   openHoldOnContract,
   settleHoldOnContract,
   refundHoldOnContract,
-  usdToHbar,
 } from "./hedera-client.js";
 
 /**
@@ -129,7 +128,7 @@ export async function openHold(input: {
 
   // If Hedera is ready, call the contract
   if (isHederaReady()) {
-    const depositHbar = usdToHbar(input.deposit);
+    const depositHbar = input.deposit;
     const result = await openHoldOnContract(entry.id, depositHbar, expiresAt);
 
     if (result.success && result.transactionId) {

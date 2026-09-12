@@ -77,14 +77,22 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "fly402 — autonomous flight booking" },
+      {
+        name: "description",
+        content:
+          "An agent that watches fares, holds your seat with an on-chain escrow deposit, and books it — paid per call over x402 on Hedera.",
+      },
+      { name: "author", content: "fly402" },
+      { property: "og:title", content: "fly402 — autonomous flight booking" },
+      {
+        property: "og:description",
+        content:
+          "An agent that watches fares, holds your seat with an on-chain escrow deposit, and books it — paid per call over x402 on Hedera.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      
     ],
     links: [
       {

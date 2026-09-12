@@ -16,7 +16,7 @@ export function Shell({ children, step }: { children: ReactNode; step?: 1 | 2 })
               402
             </div>
             <span className="font-mono text-sm tracking-tight">
-              blocky<span className="text-mint">402</span> · autonomous travel
+              fly<span className="text-mint">402</span> · autonomous travel
             </span>
           </Link>
           <div className="flex items-center gap-6">
@@ -28,9 +28,6 @@ export function Shell({ children, step }: { children: ReactNode; step?: 1 | 2 })
             </Link>
             <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-steel sm:inline">
               hedera testnet
-            </span>
-            <span className="inline-flex items-center rounded-md bg-amber/15 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-amber ring-1 ring-amber/40">
-              Demo mode
             </span>
           </div>
         </div>

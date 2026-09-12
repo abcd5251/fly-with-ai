@@ -16,10 +16,9 @@ export type HoldStatus = "held" | "released" | "expired" | "booked";
 export type HoldMode = "onchain" | "simulated";
 
 export type HoldPayment = {
-  totalUsd: number;
   totalHbar: number;
-  feeUsd: number;
-  depositUsd: number;
+  feeHbar: number;
+  depositHbar: number;
 };
 
 export type Hold = {
@@ -52,15 +51,17 @@ export const holdWindows = [6, 24] as const;
 export const ESCROW_ADDRESS = "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170";
 
 /**
- * For testing: use small fixed amounts that fit within 20 HBAR (~$1 at $0.05/HBAR)
- * Fee: $0.20 (non-refundable)
- * Deposit: $0.80 (refundable)
- * Total: $1.00 = 20 HBAR
+ * What a hold costs, in HBAR. Fixed — it does not scale with the fare, because
+ * it pays for the seat being off the market, not for the seat itself.
+ *
+ * Must stay in step with backend/seller/src/lib/pricing.ts.
  */
+export const HOLD_FEE_HBAR = 0.1;
+export const HOLD_DEPOSIT_HBAR = 0.4;
+export const BOOKING_HBAR = 0.1;
+
 export function holdQuote(_fareTotal: number, _hours: number) {
-  const fee = 0.20;
-  const deposit = 0.80;
-  return { fee, deposit };
+  return { fee: HOLD_FEE_HBAR, deposit: HOLD_DEPOSIT_HBAR };
 }
 
 /** The spending policy the user set on step 01 — a hard gate before any payment. */
@@ -69,18 +70,18 @@ export function policyCheck(quote: { fee: number; deposit: number }, trip: Trip)
   if (quote.fee > trip.maxHoldFee)
     return {
       ok: false,
-      reason: `fee ${usd(quote.fee)} over your ${usd(trip.maxHoldFee)} cap`,
+      reason: `fee ${hbar(quote.fee)} over your ${hbar(trip.maxHoldFee)} cap`,
     } as const;
   if (quote.deposit > trip.maxDeposit)
     return {
       ok: false,
-      reason: `deposit ${usd(quote.deposit)} over your ${usd(trip.maxDeposit)} cap`,
+      reason: `deposit ${hbar(quote.deposit)} over your ${hbar(trip.maxDeposit)} cap`,
     } as const;
   return { ok: true, reason: "" } as const;
 }
 
-function usd(n: number) {
-  return `$${n.toFixed(2)}`;
+function hbar(n: number) {
+  return `${n} HBAR`;
 }
 
 const hex = (n: number) =>
@@ -142,10 +143,9 @@ export async function placeHold(input: {
     ...(onChain?.payment
       ? {
           payment: {
-            totalUsd: onChain.payment.totalUsd,
             totalHbar: onChain.payment.totalHbar,
-            feeUsd: onChain.payment.feeUsd,
-            depositUsd: onChain.payment.depositUsd,
+            feeHbar: onChain.payment.feeHbar,
+            depositHbar: onChain.payment.depositHbar,
           },
         }
       : {}),

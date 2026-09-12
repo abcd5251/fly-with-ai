@@ -18,12 +18,12 @@ import { Shell } from "@/components/Shell";
 import { useCountdown } from "@/hooks/use-countdown";
 import { fetchEscrow, type EscrowEntry, type EscrowSnapshot } from "@/lib/api";
 import { fmtCountdown, shortTx } from "@/lib/hold";
-import { money } from "@/lib/trip";
+import { hbar } from "@/lib/trip";
 
 export const Route = createFileRoute("/escrow")({
   head: () => ({
     meta: [
-      { title: "Escrow Vault — Seat Deposits on Hedera | TravelPay AI" },
+      { title: "Escrow Vault — Seat Deposits on Hedera | fly402" },
       {
         name: "description",
         content:
@@ -81,9 +81,9 @@ function HoldRow({ e }: { e: EscrowEntry }) {
         <span className="mt-0.5 block font-mono text-[10.5px] text-steel">{e.route}</span>
       </td>
       <td className="px-3 py-3 text-right font-mono text-[13px] font-bold text-mint">
-        {money(e.deposit)}
+        {hbar(e.deposit)}
       </td>
-      <td className="px-3 py-3 text-right font-mono text-[12px] text-steel">{money(e.fee)}</td>
+      <td className="px-3 py-3 text-right font-mono text-[12px] text-steel">{hbar(e.fee)}</td>
       <td className="px-3 py-3">
         <span
           className={`inline-block rounded px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.12em] ${statusStyle[e.status]}`}
@@ -126,7 +126,7 @@ function EscrowPage() {
 
   // what this looks like at scale
   const [holdsPerDay, setHoldsPerDay] = useState(5000);
-  const [avgDeposit, setAvgDeposit] = useState(45);
+  const [avgDeposit, setAvgDeposit] = useState(0.4);
   const [windowHours, setWindowHours] = useState(24);
 
   const projectedTvl = holdsPerDay * avgDeposit * (windowHours / 24);
@@ -138,12 +138,12 @@ function EscrowPage() {
   const c = vault.contract;
 
   const stats = [
-    { icon: Landmark, k: "Locked now", v: money(vault.tvl), tone: "mint" },
+    { icon: Landmark, k: "Locked now", v: hbar(vault.tvl), tone: "mint" },
     { icon: Lock, k: "Active holds", v: String(vault.active) },
     { icon: Timer, k: "Avg window", v: `${vault.avgWindowHours}h` },
-    { icon: RefreshCcw, k: "Refunded", v: money(vault.totals.depositsRefunded) },
-    { icon: Check, k: "Settled to sellers", v: money(vault.totals.depositsSettled) },
-    { icon: Coins, k: "Fees paid · x402", v: money(vault.totals.feesPaid) },
+    { icon: RefreshCcw, k: "Refunded", v: hbar(vault.totals.depositsRefunded) },
+    { icon: Check, k: "Settled to sellers", v: hbar(vault.totals.depositsSettled) },
+    { icon: Coins, k: "Fees paid · x402", v: hbar(vault.totals.feesPaid) },
   ];
 
   return (
@@ -181,7 +181,7 @@ function EscrowPage() {
                 Total value locked
               </p>
               <p className="mt-1 font-mono text-5xl font-bold tabular-nums text-mint">
-                {money(vault.tvl)}
+                {hbar(vault.tvl)}
               </p>
               <p className="mt-2 font-mono text-[11.5px] text-steel">
                 across {vault.active} live {vault.active === 1 ? "hold" : "holds"} ·{" "}
@@ -311,10 +311,10 @@ function EscrowPage() {
                 label: "Average deposit",
                 value: avgDeposit,
                 set: setAvgDeposit,
-                min: 10,
-                max: 200,
-                step: 5,
-                fmt: (n: number) => money(n),
+                min: 0.1,
+                max: 5,
+                step: 0.1,
+                fmt: (n: number) => hbar(n),
               },
               {
                 label: "Average hold window",
@@ -365,7 +365,8 @@ function EscrowPage() {
                 Steady-state TVL
               </p>
               <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-mint">
-                ${Math.round(projectedTvl).toLocaleString("en-US")}
+                {Math.round(projectedTvl).toLocaleString("en-US")}
+                <span className="ml-1.5 text-lg text-steel">HBAR</span>
               </p>
               <p className="mt-2 font-mono text-[11.5px] leading-relaxed text-steel">
                 holds/day × deposit × window ÷ 24 — locked at any moment, recycling{" "}
@@ -379,7 +380,7 @@ function EscrowPage() {
                   Deposit flow / yr
                 </p>
                 <p className="mt-0.5 font-mono text-[15px] font-bold tabular-nums text-ink">
-                  ${(yearlyFlow / 1_000_000).toFixed(1)}M
+                  {(yearlyFlow / 1_000_000).toFixed(1)}M HBAR
                 </p>
               </div>
               <div className="chip rounded-xl p-4">
@@ -409,8 +410,8 @@ function EscrowPage() {
           {[
             {
               icon: Coins,
-              title: "Fees fixed in dollars",
-              body: "A hold earns the seller about $2. Settlement has to cost cents and keep costing cents — a gas spike would make the whole product unsellable.",
+              title: "Settlement cost stays flat",
+              body: "A hold earns the seller a fraction of an HBAR. Settlement has to cost a rounding error and keep costing one — a gas spike would make the whole product unsellable.",
               hook: "open() + refund() ≈ $0.0002 total",
             },
             {

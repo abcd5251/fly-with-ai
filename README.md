@@ -8,7 +8,7 @@ Fly402 demonstrates how to integrate x402 payments into a real-world application
 
 - **Frontend**: React app built with TanStack Router and Vite
 - **Backend**: Express.js server with x402 payment middleware
-- **Payment**: 1 HBAR per booking via Hedera testnet
+- **Payment**: 0.1 HBAR per booking via Hedera testnet
 
 The x402 protocol enables native HTTP payments where protected resources return `402 Payment Required` responses, and clients automatically handle payment authorization.
 
@@ -88,7 +88,7 @@ The x402 protocol enables native HTTP payments where protected resources return 
    # Email notifications (Resend) - optional
    RESEND_API_KEY=re_xxxxx          # Get from https://resend.com
    EMAIL_FROM=onboarding@resend.dev # Or your verified domain email
-   APP_URL=http://localhost:5173    # Frontend URL for deep links
+   APP_URL=http://localhost:8080    # Frontend URL for deep links
    ```
 
 ### Frontend Configuration
@@ -127,12 +127,12 @@ The server will start at `http://localhost:4021` with the following endpoints:
 | `/flights/search` | GET | Free | List all flights |
 | `/flights/catalog` | GET | Free | Live Google Flights + demo inventory |
 | `/flights/:id` | GET | Free | Flight details |
-| `/holds` | POST | Paid (20 HBAR) | Create seat hold with escrow |
+| `/holds` | POST | Paid (0.5 HBAR) | Create seat hold with escrow |
 | `/holds/:id` | GET | Free | Check hold status |
 | `/holds/:id/release` | POST | Free | Release hold and refund deposit |
 | `/notify/match` | POST | Free | Send email notification for matched flight |
 | `/escrow` | GET | Free | Escrow vault snapshot |
-| `/booking` | POST | Paid (1 HBAR) | Create booking |
+| `/booking` | POST | Paid (0.1 HBAR) | Create booking |
 | `/health` | GET | Free | Health check |
 
 ### Start the Frontend
@@ -142,7 +142,7 @@ cd frontend
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`
+The app will be available at `http://localhost:8080`
 
 ## Testing the Payment Flow
 
@@ -150,11 +150,11 @@ The app will be available at `http://localhost:5173`
 
 2. **Select a Flight**: Click on a flight to view details and select a fare
 
-3. **Proceed to Booking**: Review the booking summary showing "1 HBAR · Hedera Testnet"
+3. **Proceed to Booking**: Review the booking summary showing "0.1 HBAR · Hedera Testnet"
 
 4. **Confirm & Pay**: Click the pay button - the x402 client will:
    - Receive a 402 Payment Required response
-   - Sign a Hedera transaction authorizing 1 HBAR
+   - Sign a Hedera transaction authorizing 0.1 HBAR
    - Submit the payment through the Blocky402 facilitator
    - Receive the booking confirmation
 
@@ -165,7 +165,7 @@ The app will be available at `http://localhost:5173`
 1. **Browse Flights**: Open the frontend and set up your trip criteria
 2. **Select a Flight**: Click on a flight to view details
 3. **Hold the Seat**: Click "Hold this seat" - the x402 client will:
-   - Pay 20 HBAR ($0.20 fee + $0.80 deposit)
+   - Pay 0.5 HBAR (0.1 HBAR fee + 0.4 HBAR deposit)
    - The deposit is locked in the escrow contract (if configured)
    - The hold expires after the selected window (6 or 24 hours)
 4. **Release or Book**: Either release the hold (get deposit refunded) or proceed to booking
@@ -198,6 +198,7 @@ fly402/
 │       │   └── lib/
 │       │       ├── email.ts          # Email service (Resend)
 │       │       ├── escrow.ts         # Hold state management
+│       │       ├── pricing.ts        # Every amount the buyer is charged
 │       │       ├── hedera-client.ts  # Hedera SDK + escrow contract calls
 │       │       └── serpapi.ts        # Live flight search
 │       ├── package.json
@@ -276,7 +277,7 @@ The AI Monitor can send email notifications when it finds a flight matching your
    ```env
    RESEND_API_KEY=re_xxxxx
    EMAIL_FROM=onboarding@resend.dev
-   APP_URL=http://localhost:5173
+   APP_URL=http://localhost:8080
    ```
 
 3. **For testing**: Use `onboarding@resend.dev` as the sender - emails can only be sent to your Resend signup email
@@ -307,7 +308,7 @@ The AI Monitor can send email notifications when it finds a flight matching your
 |---------|-------|
 | Network | `hedera:testnet` |
 | Asset | HBAR (`0.0.0`) |
-| Amount | 1 HBAR (100,000,000 tinybars) |
+| Amount | 0.1 HBAR (10,000,000 tinybars) |
 | Facilitator | `https://api.testnet.blocky402.com` |
 
 ### Seat Hold Payment
@@ -318,9 +319,9 @@ Seat holds use x402 for payment and an on-chain escrow contract for the refundab
 |---------|-------|
 | Network | `hedera:testnet` |
 | Asset | HBAR (`0.0.0`) |
-| Fee | $0.20 (non-refundable, paid to seller) |
-| Deposit | $0.80 (refundable, locked in escrow) |
-| Total | $1.00 = 20 HBAR at $0.05/HBAR |
+| Fee | 0.1 HBAR (non-refundable, paid to seller) |
+| Deposit | 0.4 HBAR (refundable, locked in escrow) |
+| Total | 0.5 HBAR (50,000,000 tinybars) |
 | Escrow Contract | HoldEscrow (Solidity) |
 
 **Payment Flow:**
@@ -329,7 +330,8 @@ Seat holds use x402 for payment and an on-chain escrow contract for the refundab
 3. On release: deposit refunded to seller (who refunds buyer off-chain)
 4. On settle: deposit released to seller as payment
 
-> **Note**: The amounts are configured for testnet testing. For production, adjust the fee/deposit calculations in `backend/seller/src/index.ts` and `frontend/src/lib/hold.ts`.
+> **Note**: Every amount is a fixed constant, denominated in HBAR. Change it in
+> `backend/seller/src/lib/pricing.ts` and mirror it in `frontend/src/lib/hold.ts`.
 
 ## Technologies
 
