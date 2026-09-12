@@ -17,7 +17,9 @@ import {
 import { Shell } from "@/components/Shell";
 import { useCountdown } from "@/hooks/use-countdown";
 import { fetchEscrow, type EscrowEntry, type EscrowSnapshot } from "@/lib/api";
-import { fmtCountdown, shortTx } from "@/lib/hold";
+import { fmtCountdown } from "@/lib/hold";
+import { TxLink } from "@/components/TxLink";
+import { shortId } from "@/lib/hedera-account";
 import { hbar } from "@/lib/trip";
 
 export const Route = createFileRoute("/escrow")({
@@ -98,7 +100,7 @@ function HoldRow({ e }: { e: EscrowEntry }) {
             {fmtCountdown(left)}
           </span>
         ) : (
-          shortTx(e.settleTx ?? e.refundTx ?? e.depositTx)
+          <TxLink tx={e.settleTx ?? e.refundTx ?? e.depositTx} />
         )}
       </td>
     </tr>
@@ -203,7 +205,7 @@ function EscrowPage() {
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 font-mono text-[11px] text-steel transition-colors hover:text-mint"
                   >
-                    {shortTx(c.address ?? "")}
+                    {shortId(c.address ?? "")}
                     <ExternalLink className="size-3" />
                   </a>
                 ) : (

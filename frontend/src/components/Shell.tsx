@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { WalletChip } from "@/components/WalletChip";
 import type { ReactNode } from "react";
 
 const steps = [
@@ -26,9 +27,7 @@ export function Shell({ children, step }: { children: ReactNode; step?: 1 | 2 })
             >
               escrow vault
             </Link>
-            <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-steel sm:inline">
-              hedera testnet
-            </span>
+            <WalletChip />
           </div>
         </div>
 

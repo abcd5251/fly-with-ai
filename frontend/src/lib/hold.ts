@@ -209,10 +209,6 @@ export function fmtCountdown(ms: number) {
   return h > 0 ? `${h}h ${pad(m)}m ${pad(s)}s` : `${pad(m)}m ${pad(s)}s`;
 }
 
-export function shortTx(tx: string) {
-  return `${tx.slice(0, 8)}…${tx.slice(-6)}`;
-}
-
 const KEY = "x402-hold";
 
 export function saveHold(hold: Hold | null) {

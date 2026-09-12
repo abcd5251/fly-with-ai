@@ -31,6 +31,8 @@ import {
   Zap,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { TxLink } from "@/components/TxLink";
+import { hashscanContract, shortId } from "@/lib/hedera-account";
 import { pickFlight, useCatalog } from "@/hooks/use-catalog";
 import { useCountdown } from "@/hooks/use-countdown";
 import {
@@ -44,7 +46,6 @@ import {
   policyCheck,
   releaseHold,
   saveHold,
-  shortTx,
   type Hold,
 } from "@/lib/hold";
 import { getHoldStatus } from "@/lib/api";
@@ -762,7 +763,15 @@ function MatchPage() {
                 />
               </div>
               <p className="mt-3 font-mono text-[10.5px] text-steel">
-                escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
+                <a
+                  href={hashscanContract(hold!.escrow)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-mint/85 underline decoration-mint/30 underline-offset-2 hover:text-mint"
+                >
+                  escrow {shortId(hold!.escrow)}
+                </a>{" · "}
+                <TxLink tx={hold!.depositTx} label="deposit tx" />
                 {hold!.mode === "simulated" && " · local"}
               </p>
               {hold!.requestError && (
@@ -897,7 +906,7 @@ function MatchPage() {
             </p>
             {hold.refundTx && (
               <p className="mt-1.5 font-mono text-[10.5px] text-steel">
-                refund tx {shortTx(hold.refundTx)}
+                <TxLink tx={hold.refundTx} label="refund tx" />
               </p>
             )}
           </div>

@@ -15,6 +15,8 @@ import {
   Timer,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { TxLink } from "@/components/TxLink";
+import { hashscanContract, shortId } from "@/lib/hedera-account";
 import { useCatalog } from "@/hooks/use-catalog";
 import { useCountdown } from "@/hooks/use-countdown";
 import {
@@ -24,7 +26,6 @@ import {
   isActive,
   placeHold,
   policyCheck,
-  shortTx,
   type Hold,
 } from "@/lib/hold";
 import {
@@ -377,7 +378,16 @@ function RequestPage() {
                     </p>
                     {holdLive && (
                       <p className="mt-1 font-mono text-[10.5px] text-steel">
-                        escrow {shortTx(hold!.escrow)} · deposit tx {shortTx(hold!.depositTx)}
+                        <a
+                          href={hashscanContract(hold!.escrow)}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-mint/85 underline decoration-mint/30 underline-offset-2 hover:text-mint"
+                        >
+                          escrow {shortId(hold!.escrow)}
+                        </a>{" · "}
+                        <TxLink tx={hold!.depositTx} label="deposit tx" />
                         {hold!.mode === "simulated" && " · local"}
                       </p>
                     )}
