@@ -118,8 +118,7 @@ export type HoldResponse = {
 };
 
 export type HoldRequestResult =
-  | { ok: true; data: HoldResponse }
-  | { ok: false; error: string; status?: number };
+  { ok: true; data: HoldResponse } | { ok: false; error: string; status?: number };
 
 function payingFetch(): { fetch: typeof fetch; usingX402: boolean } {
   console.log("[api] payingFetch() called");
@@ -128,7 +127,10 @@ function payingFetch(): { fetch: typeof fetch; usingX402: boolean } {
     console.log("[api] Got x402 fetch wrapper successfully");
     return { fetch: x402Fetch, usingX402: true };
   } catch (e) {
-    console.error("[api] x402 not available, using regular fetch:", e instanceof Error ? e.message : e);
+    console.error(
+      "[api] x402 not available, using regular fetch:",
+      e instanceof Error ? e.message : e,
+    );
     if (e instanceof Error && e.stack) {
       console.error("[api] Stack:", e.stack);
     }
@@ -162,7 +164,9 @@ export async function requestHoldOnChain(req: HoldRequest): Promise<HoldRequestR
 
       if (res.status === 402) {
         console.error("[hold] 402 Payment Required — x402 payment failed or wallet not configured");
-        console.error("[hold] Check that VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are set in frontend/.env");
+        console.error(
+          "[hold] Check that VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are set in frontend/.env",
+        );
         console.error("[hold] Response headers:", Object.fromEntries(res.headers.entries()));
         return {
           ok: false,

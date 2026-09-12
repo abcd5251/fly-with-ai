@@ -333,13 +333,15 @@ function RequestPage() {
                     className="group mt-3 block rounded-2xl border border-mint/40 bg-[#0c1613] p-5 transition-all hover:border-mint/70 hover:shadow-[0_0_50px_-18px_rgba(70,240,192,0.8)]"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="chrome bevel grid size-9 shrink-0 place-items-center rounded-lg font-mono text-[10px] font-bold text-void">
-                        402
-                      </span>
+                      <img
+                        src="/logo-128.png"
+                        alt=""
+                        width={36}
+                        height={36}
+                        className="size-9 shrink-0 rounded-lg"
+                      />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-[12px] text-ink">
-                          agent@fly402.ai
-                        </p>
+                        <p className="truncate font-mono text-[12px] text-ink">agent@fly402.ai</p>
                         <p className="truncate font-mono text-[11px] text-steel">to {trip.email}</p>
                       </div>
                       <span className="font-mono text-[11px] text-steel">just now</span>
@@ -356,9 +358,9 @@ function RequestPage() {
                       {holdLive ? (
                         <>
                           I paid {hbar(hold!.fee)} to take this seat off the market and escrowed{" "}
-                          {hbar(hold!.deposit)} as a refundable deposit — your price is locked
-                          until the timer runs out. Open it to book, or release the hold and the
-                          deposit comes straight back.
+                          {hbar(hold!.deposit)} as a refundable deposit — your price is locked until
+                          the timer runs out. Open it to book, or release the hold and the deposit
+                          comes straight back.
                         </>
                       ) : (
                         <>
@@ -386,7 +388,8 @@ function RequestPage() {
                           className="text-mint/85 underline decoration-mint/30 underline-offset-2 hover:text-mint"
                         >
                           escrow {shortId(hold!.escrow)}
-                        </a>{" · "}
+                        </a>
+                        {" · "}
                         <TxLink tx={hold!.depositTx} label="deposit tx" />
                         {hold!.mode === "simulated" && " · local"}
                       </p>

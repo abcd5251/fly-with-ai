@@ -13,9 +13,13 @@ export function Shell({ children, step }: { children: ReactNode; step?: 1 | 2 })
       <header className="border-b border-edge bg-panel/70">
         <div className="mx-auto flex max-w-[1180px] items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-3">
-            <div className="chrome bevel grid size-8 place-items-center rounded-md font-mono text-xs font-bold text-void">
-              402
-            </div>
+            <img
+              src="/logo-128.png"
+              alt="fly402"
+              width={32}
+              height={32}
+              className="size-8 rounded-lg"
+            />
             <span className="font-mono text-sm tracking-tight">
               fly<span className="text-mint">402</span> · autonomous travel
             </span>

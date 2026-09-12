@@ -29,7 +29,7 @@ export function getX402Fetch(): typeof fetch {
 
   if (!HEDERA_ACCOUNT_ID || !HEDERA_PRIVATE_KEY) {
     const err = new Error(
-      "x402 wallet not configured: VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are required"
+      "x402 wallet not configured: VITE_HEDERA_ACCOUNT_ID and VITE_HEDERA_PRIVATE_KEY are required",
     );
     initError = err;
     console.error("[x402-client]", err.message);
@@ -52,20 +52,19 @@ export function getX402Fetch(): typeof fetch {
     // Parse the private key as ECDSA
     const privateKey = PrivateKey.fromStringECDSA(keyStr);
     console.log("[x402-client] Parsed private key with fromStringECDSA");
-    console.log("[x402-client] Public key:", privateKey.publicKey.toString().substring(0, 30) + "...");
-
-    const signer = createClientHederaSigner(
-      HEDERA_ACCOUNT_ID,
-      privateKey,
-      { network: "hedera:testnet" }
+    console.log(
+      "[x402-client] Public key:",
+      privateKey.publicKey.toString().substring(0, 30) + "...",
     );
+
+    const signer = createClientHederaSigner(HEDERA_ACCOUNT_ID, privateKey, {
+      network: "hedera:testnet",
+    });
     console.log("[x402-client] Created Hedera signer for account", HEDERA_ACCOUNT_ID);
 
     // Use fromConfig with spendControls: false to allow HBAR payments
     const client = x402Client.fromConfig({
-      schemes: [
-        { network: "hedera:*", client: new ExactHederaScheme(signer) },
-      ],
+      schemes: [{ network: "hedera:*", client: new ExactHederaScheme(signer) }],
       spendControls: false, // Disable all controls - any asset, no caps
     });
     console.log("[x402-client] Created x402Client with spendControls: false");
@@ -73,8 +72,14 @@ export function getX402Fetch(): typeof fetch {
     // Add lifecycle hooks for debugging
     client.onBeforePaymentCreation(async (context) => {
       console.log("[x402-client] onBeforePaymentCreation called");
-      console.log("[x402-client] Payment requirements:", JSON.stringify(context.paymentRequired, null, 2));
-      console.log("[x402-client] Selected requirements:", JSON.stringify(context.selectedRequirements, null, 2));
+      console.log(
+        "[x402-client] Payment requirements:",
+        JSON.stringify(context.paymentRequired, null, 2),
+      );
+      console.log(
+        "[x402-client] Selected requirements:",
+        JSON.stringify(context.selectedRequirements, null, 2),
+      );
     });
 
     client.onAfterPaymentCreation(async (context) => {
@@ -85,7 +90,10 @@ export function getX402Fetch(): typeof fetch {
     client.onPaymentCreationFailure(async (context) => {
       console.error("[x402-client] onPaymentCreationFailure called");
       console.error("[x402-client] Error:", context.error);
-      console.error("[x402-client] Requirements:", JSON.stringify(context.paymentRequired, null, 2));
+      console.error(
+        "[x402-client] Requirements:",
+        JSON.stringify(context.paymentRequired, null, 2),
+      );
     });
 
     // Just use the wrapped fetch directly without extra wrapper
