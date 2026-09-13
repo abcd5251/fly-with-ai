@@ -1,5 +1,7 @@
 console.log("[x402-client] Module loading...");
 
+// must come first: installs globalThis.Buffer for @x402/hedera
+import "./node-globals";
 import { x402Client } from "@x402/core/client";
 import { createClientHederaSigner, PrivateKey } from "@x402/hedera";
 import { ExactHederaScheme } from "@x402/hedera/exact/client";
