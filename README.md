@@ -8,7 +8,8 @@ Fly402 demonstrates how to integrate x402 payments into a real-world application
 
 - **Frontend**: React app built with TanStack Router and Vite
 - **Backend**: Express.js server with x402 payment middleware
-- **Payment**: 0.1 HBAR per booking via Hedera testnet
+- **Payment**: 
+per booking via Hedera testnet
 
 The x402 protocol enables native HTTP payments where protected resources return `402 Payment Required` responses, and clients automatically handle payment authorization.
 

@@ -56,9 +56,9 @@ export const ESCROW_ADDRESS = "0x4021F9c3B7a8E5d0C1b6A9e8F7d6C5b4A3928170";
  *
  * Must stay in step with backend/seller/src/lib/pricing.ts.
  */
-export const HOLD_FEE_HBAR = 0.1;
-export const HOLD_DEPOSIT_HBAR = 0.4;
-export const BOOKING_HBAR = 0.1;
+export const HOLD_FEE_HBAR = 1;
+export const HOLD_DEPOSIT_HBAR = 4;
+export const BOOKING_HBAR = 50;
 
 export function holdQuote(_fareTotal: number, _hours: number) {
   return { fee: HOLD_FEE_HBAR, deposit: HOLD_DEPOSIT_HBAR };

@@ -7,13 +7,13 @@
  */
 
 /** Charged on POST /booking to confirm a seat. */
-export const BOOKING_HBAR = 0.1;
+export const BOOKING_HBAR = 50;
 
 /** Non-refundable slice of a seat hold. Stays with the seller. */
-export const HOLD_FEE_HBAR = 0.1;
+export const HOLD_FEE_HBAR = 1;
 
 /** Refundable slice of a seat hold. Forwarded to the HoldEscrow contract. */
-export const HOLD_DEPOSIT_HBAR = 0.4;
+export const HOLD_DEPOSIT_HBAR = 4;
 
 /** What x402 collects up front for a hold: fee + deposit. */
 export const HOLD_TOTAL_HBAR = HOLD_FEE_HBAR + HOLD_DEPOSIT_HBAR;
